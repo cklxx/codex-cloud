@@ -29,6 +29,7 @@ pub(crate) struct ToolsConfig {
     pub apply_patch_tool_type: Option<ApplyPatchToolType>,
     pub web_search_request: bool,
     pub include_view_image_tool: bool,
+    pub include_subagent_tool: bool,
     pub experimental_unified_exec_tool: bool,
     pub experimental_supported_tools: Vec<String>,
 }
@@ -50,6 +51,7 @@ impl ToolsConfig {
         let include_apply_patch_tool = features.enabled(Feature::ApplyPatchFreeform);
         let include_web_search_request = features.enabled(Feature::WebSearchRequest);
         let include_view_image_tool = features.enabled(Feature::ViewImageTool);
+        let include_subagent_tool = true;
 
         let shell_type = if use_streamable_shell_tool {
             ConfigShellToolType::Streamable
@@ -77,6 +79,7 @@ impl ToolsConfig {
             apply_patch_tool_type,
             web_search_request: include_web_search_request,
             include_view_image_tool,
+            include_subagent_tool,
             experimental_unified_exec_tool,
             experimental_supported_tools: model_family.experimental_supported_tools.clone(),
         }
@@ -181,6 +184,36 @@ fn create_unified_exec_tool() -> ToolSpec {
         parameters: JsonSchema::Object {
             properties,
             required: Some(vec!["input".to_string()]),
+            additional_properties: Some(false.into()),
+        },
+    })
+}
+
+fn create_subagent_tool() -> ToolSpec {
+    let mut properties = BTreeMap::new();
+    properties.insert(
+        "task".to_string(),
+        JsonSchema::String {
+            description: Some("Detailed request that the sub-agent should handle.".to_string()),
+        },
+    );
+    properties.insert(
+        "instructions".to_string(),
+        JsonSchema::String {
+            description: Some(
+                "Optional additional system-level instructions for the sub-agent.".to_string(),
+            ),
+        },
+    );
+
+    ToolSpec::Function(ResponsesApiTool {
+        name: "subagent".to_string(),
+        description:
+            "Spin up a focused sub-agent that inherits this workspace, tools, and context to tackle a well-defined task. Use when breaking work into parallel subtasks or when you want a dedicated agent for a specific objective.".to_string(),
+        strict: false,
+        parameters: JsonSchema::Object {
+            properties,
+            required: Some(vec!["task".to_string()]),
             additional_properties: Some(false.into()),
         },
     })
@@ -726,6 +759,7 @@ pub(crate) fn build_specs(
     use crate::tools::handlers::PlanHandler;
     use crate::tools::handlers::ReadFileHandler;
     use crate::tools::handlers::ShellHandler;
+    use crate::tools::handlers::SubAgentHandler;
     use crate::tools::handlers::TestSyncHandler;
     use crate::tools::handlers::UnifiedExecHandler;
     use crate::tools::handlers::ViewImageHandler;
@@ -739,6 +773,7 @@ pub(crate) fn build_specs(
     let plan_handler = Arc::new(PlanHandler);
     let apply_patch_handler = Arc::new(ApplyPatchHandler);
     let view_image_handler = Arc::new(ViewImageHandler);
+    let subagent_handler = Arc::new(SubAgentHandler);
     let mcp_handler = Arc::new(McpHandler);
 
     if config.experimental_unified_exec_tool {
@@ -773,6 +808,11 @@ pub(crate) fn build_specs(
     if config.plan_tool {
         builder.push_spec(PLAN_TOOL.clone());
         builder.register_handler("update_plan", plan_handler);
+    }
+
+    if config.include_subagent_tool {
+        builder.push_spec_with_parallel_support(create_subagent_tool(), true);
+        builder.register_handler("subagent", subagent_handler);
     }
 
     if let Some(apply_patch_tool_type) = &config.apply_patch_tool_type {
@@ -917,7 +957,13 @@ mod tests {
 
         assert_eq_tool_names(
             &tools,
-            &["unified_exec", "update_plan", "web_search", "view_image"],
+            &[
+                "unified_exec",
+                "update_plan",
+                "subagent",
+                "web_search",
+                "view_image",
+            ],
         );
     }
 
@@ -936,7 +982,13 @@ mod tests {
 
         assert_eq_tool_names(
             &tools,
-            &["unified_exec", "update_plan", "web_search", "view_image"],
+            &[
+                "unified_exec",
+                "update_plan",
+                "subagent",
+                "web_search",
+                "view_image",
+            ],
         );
     }
 
@@ -958,6 +1010,7 @@ mod tests {
         assert!(find_tool(&tools, "grep_files").supports_parallel_tool_calls);
         assert!(find_tool(&tools, "list_dir").supports_parallel_tool_calls);
         assert!(find_tool(&tools, "read_file").supports_parallel_tool_calls);
+        assert!(find_tool(&tools, "subagent").supports_parallel_tool_calls);
     }
 
     #[test]
@@ -1043,6 +1096,7 @@ mod tests {
             &tools,
             &[
                 "unified_exec",
+                "subagent",
                 "web_search",
                 "view_image",
                 "test_server/do_something_cool",
@@ -1050,7 +1104,7 @@ mod tests {
         );
 
         assert_eq!(
-            tools[3].spec,
+            tools[4].spec,
             ToolSpec::Function(ResponsesApiTool {
                 name: "test_server/do_something_cool".to_string(),
                 parameters: JsonSchema::Object {
@@ -1158,6 +1212,7 @@ mod tests {
             &tools,
             &[
                 "unified_exec",
+                "subagent",
                 "view_image",
                 "test_server/cool",
                 "test_server/do",
@@ -1206,6 +1261,7 @@ mod tests {
             &tools,
             &[
                 "unified_exec",
+                "subagent",
                 "apply_patch",
                 "web_search",
                 "view_image",
@@ -1214,7 +1270,7 @@ mod tests {
         );
 
         assert_eq!(
-            tools[4].spec,
+            tools[5].spec,
             ToolSpec::Function(ResponsesApiTool {
                 name: "dash/search".to_string(),
                 parameters: JsonSchema::Object {
@@ -1271,6 +1327,7 @@ mod tests {
             &tools,
             &[
                 "unified_exec",
+                "subagent",
                 "apply_patch",
                 "web_search",
                 "view_image",
@@ -1278,7 +1335,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            tools[4].spec,
+            tools[5].spec,
             ToolSpec::Function(ResponsesApiTool {
                 name: "dash/paginate".to_string(),
                 parameters: JsonSchema::Object {
@@ -1334,6 +1391,7 @@ mod tests {
             &tools,
             &[
                 "unified_exec",
+                "subagent",
                 "apply_patch",
                 "web_search",
                 "view_image",
@@ -1341,7 +1399,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            tools[4].spec,
+            tools[5].spec,
             ToolSpec::Function(ResponsesApiTool {
                 name: "dash/tags".to_string(),
                 parameters: JsonSchema::Object {
@@ -1399,6 +1457,7 @@ mod tests {
             &tools,
             &[
                 "unified_exec",
+                "subagent",
                 "apply_patch",
                 "web_search",
                 "view_image",
@@ -1406,7 +1465,7 @@ mod tests {
             ],
         );
         assert_eq!(
-            tools[4].spec,
+            tools[5].spec,
             ToolSpec::Function(ResponsesApiTool {
                 name: "dash/value".to_string(),
                 parameters: JsonSchema::Object {
@@ -1501,6 +1560,7 @@ mod tests {
             &tools,
             &[
                 "unified_exec",
+                "subagent",
                 "apply_patch",
                 "web_search",
                 "view_image",
@@ -1509,7 +1569,7 @@ mod tests {
         );
 
         assert_eq!(
-            tools[4].spec,
+            tools[5].spec,
             ToolSpec::Function(ResponsesApiTool {
                 name: "test_server/do_something_cool".to_string(),
                 parameters: JsonSchema::Object {

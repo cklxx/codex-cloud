@@ -33,6 +33,28 @@ Then simply run `codex` to get started:
 codex
 ```
 
+### Codex Cloud mode
+
+To browse and apply Codex Cloud tasks from the CLI, run the interactive browser:
+
+```shell
+codex --cloud
+```
+
+Set `CODEX_CLOUD_DEFAULT=1` (or `true`, `yes`, `on`) to make the Codex Cloud task browser the default experience when invoking `codex` without subcommands. See [Codex Cloud architecture](./docs/codex-cloud.md) for details about how the CLI interacts with the hosted service. 要在私有环境中复刻 Codex Cloud，请参考[最小可行版本设计](./docs/codex-cloud-mvp.md)以及更完整的[自建方案蓝图](./docs/codex-cloud-replication-plan.md)。当前路线图明确“先实现 MVP 版本”，相关冲刺节奏与进度更新见 MVP 文档中的[实施启动计划](./docs/codex-cloud-mvp.md#11-实施启动计划)。
+
+### Self-hosted Codex Cloud MVP stack
+
+The repository now includes the first runnable building blocks for the single-machine Codex Cloud MVP described in the docs.
+
+1. Copy `cloud/.env.example` to `cloud/.env` and adjust secrets or database settings as needed.
+2. From the repo root run `make -C cloud dev` (or `docker compose -f cloud/docker-compose.yml up`) to build and start the Rust API (`http://localhost:8000`) and the Next.js frontend (`http://localhost:3000`). SQLite data and artifacts persist in the mounted `codex-data` volume.
+3. Once the containers are ready, create a bootstrap user with `docker compose -f cloud/docker-compose.yml exec api codex-cloud-backend create-admin <email> <password>` and then sign in via the web UI.
+4. Point the CLI at `http://localhost:8000` via `CODEX_CLOUD_TASKS_BASE_URL` or explore the task list, detail, creation, and attempt flows directly in the browser.
+
+Automated coverage for the happy-path workflow lives in `cloud/backend/tests/task_flow.rs`; run it locally with `cargo test` from the `cloud/backend` directory. The frontend builds with `pnpm --filter codex-cloud-frontend build`.
+
+
 <details>
 <summary>You can also go to the <a href="https://github.com/openai/codex/releases/latest">latest GitHub Release</a> and download the appropriate binary for your platform.</summary>
 

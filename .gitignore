@@ -12,6 +12,7 @@ dist/
 build/
 out/
 storybook-static/
+cloud/frontend/.next/
 
 # ignore README for publishing
 codex-cli/README.md

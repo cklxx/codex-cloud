@@ -208,7 +208,7 @@ CREATE TABLE task_attempts (
 - [x] 落地 MVP API（任务 CRUD、claim、attempt、complete），提供 JSON Schema/端到端测试。（Axum + sqlx）
 - [x] 接入对象存储（MinIO SDK），实现 diff/log 上传与预签名 URL 返回。（`cloud/backend/src/storage.rs`、`cloud/backend/src/artifacts.rs`）
 - [x] 编写 API 层测试（Rust async 集成测试），覆盖核心 happy path 与鉴权。
-- [ ] 提供 CLI 兼容性契约测试脚本（使用现有 `codex cloud exec` 流程）。
+- [x] 提供 CLI 兼容性契约测试脚本（使用现有 `codex cloud exec` 流程，见 `cloud/scripts/cli-contract.sh`）。
 
 ### 10.3 Web 前端
 
@@ -221,12 +221,13 @@ CREATE TABLE task_attempts (
 
 ### 10.4 执行器与 Firecracker
 
-- [ ] 编写 Supervisor（Rust/Go/Python 任一），实现数据库轮询、任务出队与状态回写。
+- [x] 编写 Supervisor（Rust/Go/Python 任一），实现数据库轮询、任务出队与状态回写。（新增 `cloud/supervisor` Rust 服务）
 - [ ] 制作基础 OCI 镜像并使用 Ignite 生成 Firecracker snapshot；记录构建脚本。
-- [ ] 实现 snapshot 预热池与最大并发控制（配置化线程池/信号量）。
+- [ ] 实现 snapshot 预热池（预热池策略待实现）。
+- [x] 提供可配置的最大并发控制（Supervisor 通过并发上限配置串行/并行执行）。
 - [ ] 集成仓库缓存与依赖预热脚本，保证 <300 ms 启动目标。
-- [ ] 对接 MinIO 上传日志、diff，并调用 API `complete`。
-- [ ] 编写集成测试：模拟任务入队、触发执行、校验 diff/log 上传与状态流转。
+- [x] 对接 MinIO 上传日志、diff，并调用 API `complete`。（Supervisor 通过 `/tasks/attempts/{id}/complete` 上报文本工件，由后端写入对象存储。）
+- [x] 编写集成测试：模拟任务入队、触发执行、校验 diff/log 上传与状态流转。（`cloud/supervisor` 使用 WireMock 覆盖完整提交流程。）
 
 ### 10.5 运维与观测
 

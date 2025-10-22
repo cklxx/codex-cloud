@@ -26,5 +26,19 @@ services:
     depends_on:
       - api
 
+  supervisor:
+    build:
+      context: ./supervisor
+    environment:
+      - CODEX_CLOUD_API_BASE=${CODEX_CLOUD_SUPERVISOR_API_BASE:-http://api:8000}
+      - CODEX_CLOUD_EMAIL=${CODEX_CLOUD_SUPERVISOR_EMAIL:-codex-cli@example.com}
+      - CODEX_CLOUD_PASSWORD=${CODEX_CLOUD_SUPERVISOR_PASSWORD:-codex-cli}
+      - CODEX_CLOUD_POLL_INTERVAL=${CODEX_CLOUD_SUPERVISOR_POLL_INTERVAL:-5}
+      - CODEX_CLOUD_ENVIRONMENT_ID=${CODEX_CLOUD_SUPERVISOR_ENVIRONMENT_ID:-}
+      - CODEX_CLOUD_MAX_CONCURRENCY=${CODEX_CLOUD_SUPERVISOR_MAX_CONCURRENCY:-1}
+    depends_on:
+      - api
+    restart: unless-stopped
+
 volumes:
   codex-data:

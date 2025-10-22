@@ -1,0 +1,158 @@
+version: "3.9"
+
+# This compose file is designed for production deployments. Override values by
+# placing a docker-compose.override.yml next to it or by exporting environment
+# variables before invoking `docker compose -f docker-compose.production.yml`.
+# See the "Overrides" section at the bottom of this file for details.
+
+volumes:
+  codex-db:
+  codex-artifacts:
+  prometheus-data:
+  grafana-data:
+
+services:
+  api:
+    build:
+      context: ./backend
+    image: codex-cloud-api:latest
+    restart: always
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////var/lib/codex/db/codex.db}
+      CODEX_CLOUD_SECRET_KEY: ${CODEX_CLOUD_SECRET_KEY:-changeme}
+      CODEX_ARTIFACTS_DIR: /var/lib/codex/artifacts
+      CODEX_ARTIFACT_BASE_URL: ${CODEX_ARTIFACT_BASE_URL:-https://codex.example.com/artifacts}
+      CODEX_ACCESS_TOKEN_EXPIRE_MINUTES: ${CODEX_ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      CODEX_CORS_ORIGINS: ${CODEX_CORS_ORIGINS:-https://codex.example.com}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1g
+        reservations:
+          cpus: "1"
+          memory: 512m
+    volumes:
+      - codex-db:/var/lib/codex/db
+      - codex-artifacts:/var/lib/codex/artifacts
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    image: codex-cloud-frontend:latest
+    restart: always
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-https://codex.example.com/api}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+        reservations:
+          cpus: "0.5"
+          memory: 256m
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+  supervisor:
+    build:
+      context: ./supervisor
+    image: codex-cloud-supervisor:latest
+    restart: always
+    environment:
+      CODEX_CLOUD_API_BASE: ${CODEX_CLOUD_SUPERVISOR_API_BASE:-http://api:8000}
+      CODEX_CLOUD_EMAIL: ${CODEX_CLOUD_SUPERVISOR_EMAIL:-codex-cli@example.com}
+      CODEX_CLOUD_PASSWORD: ${CODEX_CLOUD_SUPERVISOR_PASSWORD:-codex-cli}
+      CODEX_CLOUD_POLL_INTERVAL: ${CODEX_CLOUD_SUPERVISOR_POLL_INTERVAL:-5}
+      CODEX_CLOUD_ENVIRONMENT_ID: ${CODEX_CLOUD_SUPERVISOR_ENVIRONMENT_ID:-}
+      CODEX_CLOUD_MAX_CONCURRENCY: ${CODEX_CLOUD_SUPERVISOR_MAX_CONCURRENCY:-1}
+    healthcheck:
+      test: ["CMD-SHELL", "supervisorctl status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1g
+        reservations:
+          cpus: "0.5"
+          memory: 256m
+    depends_on:
+      api:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./ops/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1g
+        reservations:
+          cpus: "0.25"
+          memory: 512m
+
+  grafana:
+    image: grafana/grafana:10.3.1
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./ops/monitoring/grafana-dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./ops/monitoring/grafana-datasources:/etc/grafana/provisioning/datasources:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+    ports:
+      - "3001:3000"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512m
+        reservations:
+          cpus: "0.25"
+          memory: 256m
+
+# Overrides
+# ---------
+# 1. Place a file named docker-compose.override.yml alongside this manifest to
+#    override or extend services. The override file is automatically picked up
+#    by Docker Compose.
+# 2. Alternatively, pass `-f docker-compose.production.yml -f custom.yml` to
+#    `docker compose` to layer additional configuration.
+# 3. To change resource limits or environment variables temporarily, export the
+#    relevant variables before running `docker compose up -d`.

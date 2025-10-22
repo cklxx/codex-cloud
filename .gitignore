@@ -46,6 +46,9 @@ CLAUDE.md
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+cloud/frontend/playwright-report/
+cloud/frontend/test-results/
+cloud/frontend/.playwright/
 
 # env
 .env*

@@ -50,6 +50,10 @@ struct MultitoolCli {
     #[clap(flatten)]
     pub feature_toggles: FeatureToggles,
 
+    /// Launch the Codex Cloud task browser instead of the local interactive agent.
+    #[arg(long = "cloud", default_value_t = false)]
+    cloud_mode: bool,
+
     #[clap(flatten)]
     interactive: TuiCli,
 
@@ -239,6 +243,16 @@ fn print_exit_messages(exit_info: AppExitInfo) {
     }
 }
 
+fn env_var_truthy(name: &str) -> bool {
+    match std::env::var(name) {
+        Ok(value) => {
+            let normalized = value.trim().to_ascii_lowercase();
+            !normalized.is_empty() && matches!(normalized.as_str(), "1" | "true" | "yes" | "on")
+        }
+        Err(_) => false,
+    }
+}
+
 #[derive(Debug, Default, Parser, Clone)]
 struct FeatureToggles {
     /// Enable a feature (repeatable). Equivalent to `-c features.<name>=true`.
@@ -305,6 +319,7 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
     let MultitoolCli {
         config_overrides: mut root_config_overrides,
         feature_toggles,
+        cloud_mode,
         mut interactive,
         subcommand,
     } = MultitoolCli::parse();
@@ -314,7 +329,17 @@ async fn cli_main(codex_linux_sandbox_exe: Option<PathBuf>) -> anyhow::Result<()
         .raw_overrides
         .extend(feature_toggles.to_overrides());
 
+    let launch_cloud = cloud_mode || env_var_truthy("CODEX_CLOUD_DEFAULT");
+
     match subcommand {
+        None if launch_cloud => {
+            let mut cloud_cli = CloudTasksCli::default();
+            prepend_config_flags(
+                &mut cloud_cli.config_overrides,
+                root_config_overrides.clone(),
+            );
+            codex_cloud_tasks::run_main(cloud_cli, codex_linux_sandbox_exe).await?;
+        }
         None => {
             prepend_config_flags(
                 &mut interactive.config_overrides,
@@ -569,6 +594,7 @@ mod tests {
             interactive,
             config_overrides: root_overrides,
             subcommand,
+            cloud_mode: _,
             feature_toggles: _,
         } = cli;
 

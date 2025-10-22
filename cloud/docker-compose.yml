@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: ./backend
+    environment:
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///var/lib/codex/codex.db}
+      - CODEX_CLOUD_SECRET_KEY=${CODEX_CLOUD_SECRET_KEY:-changeme}
+      - CODEX_ARTIFACTS_DIR=/var/lib/codex/artifacts
+      - CODEX_ARTIFACT_BASE_URL=${CODEX_ARTIFACT_BASE_URL:-http://localhost:8000/artifacts}
+      - CODEX_ACCESS_TOKEN_EXPIRE_MINUTES=${CODEX_ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+      - CODEX_CORS_ORIGINS=${CODEX_CORS_ORIGINS:-*}
+    volumes:
+      - codex-data:/var/lib/codex
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      - NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL:-http://api:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  codex-data:

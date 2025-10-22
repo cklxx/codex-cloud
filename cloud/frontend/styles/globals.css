@@ -1,0 +1,74 @@
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  background-color: #0f172a;
+}
+
+.main-layout {
+  min-height: 100vh;
+}
+
+.artifact-modal-body {
+  background: #111827;
+  color: #e5e7eb;
+  padding: 16px;
+  border-radius: 8px;
+  max-height: 60vh;
+  overflow: auto;
+}
+
+.artifact-text-body {
+  font-family: "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.artifact-modal-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.artifact-log-line {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  padding: 2px 8px;
+  font-family: "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.artifact-log-line-number {
+  color: #9ca3af;
+}
+
+.artifact-log-line-content {
+  color: #f3f4f6;
+}
+
+.artifact-diff-wrapper {
+  margin-bottom: 24px;
+}
+
+.artifact-diff-title {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.artifact-diff-wrapper .diff {
+  font-family: "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+  font-size: 13px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.artifact-diff-wrapper:last-child {
+  margin-bottom: 0;
+}

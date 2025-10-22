@@ -120,6 +120,18 @@ pub struct Repository {
 }
 
 #[derive(Debug, Clone)]
+pub struct Environment {
+    pub id: String,
+    pub label: Option<String>,
+    pub repository_id: Uuid,
+    pub branch: String,
+    pub is_pinned: bool,
+    pub provider: Option<String>,
+    pub owner: Option<String>,
+    pub repo: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct Task {
     pub id: Uuid,
     pub title: String,
@@ -130,6 +142,7 @@ pub struct Task {
     pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub environment_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -212,6 +225,46 @@ impl From<Repository> for RepositoryRead {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct EnvironmentCreate {
+    pub id: String,
+    pub label: Option<String>,
+    pub repository_id: Uuid,
+    pub branch: String,
+    #[serde(default)]
+    pub is_pinned: bool,
+    pub provider: Option<String>,
+    pub owner: Option<String>,
+    pub repo: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EnvironmentRead {
+    pub id: String,
+    pub label: Option<String>,
+    pub repository_id: Uuid,
+    pub branch: String,
+    pub is_pinned: bool,
+    pub provider: Option<String>,
+    pub owner: Option<String>,
+    pub repo: Option<String>,
+}
+
+impl From<Environment> for EnvironmentRead {
+    fn from(value: Environment) -> Self {
+        Self {
+            id: value.id,
+            label: value.label,
+            repository_id: value.repository_id,
+            branch: value.branch,
+            is_pinned: value.is_pinned,
+            provider: value.provider,
+            owner: value.owner,
+            repo: value.repo,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TaskCreate {
     pub title: String,
     pub description: Option<String>,
@@ -228,6 +281,7 @@ pub struct TaskRead {
     pub assignee_id: Option<Uuid>,
     pub created_by: Uuid,
     pub updated_at: DateTime<Utc>,
+    pub environment_id: Option<String>,
 }
 
 impl From<Task> for TaskRead {
@@ -241,6 +295,7 @@ impl From<Task> for TaskRead {
             assignee_id: value.assignee_id,
             created_by: value.created_by,
             updated_at: value.updated_at,
+            environment_id: value.environment_id,
         }
     }
 }
@@ -252,6 +307,7 @@ pub struct TaskListResponse {
     pub status: TaskStatus,
     pub repository_id: Uuid,
     pub updated_at: DateTime<Utc>,
+    pub environment_id: Option<String>,
 }
 
 impl From<Task> for TaskListResponse {
@@ -262,6 +318,7 @@ impl From<Task> for TaskListResponse {
             status: value.status,
             repository_id: value.repository_id,
             updated_at: value.updated_at,
+            environment_id: value.environment_id,
         }
     }
 }
@@ -346,6 +403,7 @@ pub struct TaskDetail {
     pub assignee_id: Option<Uuid>,
     pub created_by: Uuid,
     pub updated_at: DateTime<Utc>,
+    pub environment_id: Option<String>,
     pub repository: Option<RepositoryRead>,
     pub attempts: Vec<AttemptRead>,
 }
@@ -366,8 +424,72 @@ impl TaskDetail {
             assignee_id: task.assignee_id,
             created_by: task.created_by,
             updated_at: task.updated_at,
+            environment_id: task.environment_id,
             repository,
             attempts,
         }
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodexEnvironmentSummary {
+    pub id: String,
+    pub label: Option<String>,
+    #[serde(default)]
+    pub is_pinned: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_count: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CodexTaskCreate {
+    pub new_task: CodexNewTask,
+    #[serde(default)]
+    pub input_items: Vec<CodexInputItem>,
+    #[serde(default)]
+    pub metadata: Option<CodexTaskMetadata>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CodexNewTask {
+    pub environment_id: String,
+    pub branch: Option<String>,
+    #[serde(default)]
+    pub run_environment_in_qa_mode: bool,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CodexInputItem {
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub role: Option<String>,
+    #[serde(default)]
+    pub content: Vec<CodexInputContent>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CodexInputContent {
+    #[serde(rename = "content_type")]
+    pub content_type: Option<String>,
+    pub text: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct CodexTaskMetadata {
+    #[serde(default)]
+    pub best_of_n: Option<usize>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodexTaskCreateResponse {
+    pub task: CodexCreatedTask,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CodexCreatedTask {
+    pub id: Uuid,
+    pub status: TaskStatus,
+    pub environment_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attempt_total: Option<usize>,
 }

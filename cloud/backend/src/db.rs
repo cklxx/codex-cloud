@@ -47,6 +47,7 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
             created_by TEXT NOT NULL,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
+            environment_id TEXT,
             FOREIGN KEY(repository_id) REFERENCES repositories(id),
             FOREIGN KEY(assignee_id) REFERENCES users(id),
             FOREIGN KEY(created_by) REFERENCES users(id)
@@ -79,6 +80,30 @@ pub async fn init_db(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         "#,
     )
     .await?;
+
+    // Environment catalog used by Codex CLI compatibility endpoints.
+    pool.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS environments (
+            id TEXT PRIMARY KEY,
+            label TEXT,
+            repository_id TEXT NOT NULL,
+            branch TEXT NOT NULL,
+            is_pinned INTEGER NOT NULL DEFAULT 0,
+            provider TEXT,
+            owner TEXT,
+            repo TEXT,
+            FOREIGN KEY(repository_id) REFERENCES repositories(id)
+        )
+        "#,
+    )
+    .await?;
+
+    // Backfill environment_id column for existing databases; ignore the error
+    // when the column already exists.
+    let _ = pool
+        .execute("ALTER TABLE tasks ADD COLUMN environment_id TEXT")
+        .await;
 
     Ok(())
 }

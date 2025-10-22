@@ -1,5 +1,6 @@
 use std::env;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 #[derive(Clone, Debug)]
 pub struct AppConfig {
@@ -9,6 +10,22 @@ pub struct AppConfig {
     pub artifact_base_url: String,
     pub access_token_expire_minutes: u64,
     pub cors_origins: Vec<String>,
+    pub oidc: Option<OidcConfig>,
+}
+
+#[derive(Clone, Debug)]
+pub struct OidcConfig {
+    pub issuer: String,
+    pub client_id: String,
+    pub client_secret: String,
+    pub redirect_uri: String,
+    pub jwks_cache: JwksCacheSettings,
+}
+
+#[derive(Clone, Debug)]
+pub struct JwksCacheSettings {
+    pub ttl: Duration,
+    pub refresh: Duration,
 }
 
 impl AppConfig {
@@ -33,6 +50,37 @@ impl AppConfig {
             .filter(|origin| !origin.is_empty())
             .collect::<Vec<_>>();
 
+        let oidc = match (
+            env::var("CODEX_OIDC_ISSUER"),
+            env::var("CODEX_OIDC_CLIENT_ID"),
+            env::var("CODEX_OIDC_CLIENT_SECRET"),
+        ) {
+            (Ok(issuer), Ok(client_id), Ok(client_secret)) => {
+                let redirect_uri = env::var("CODEX_OIDC_REDIRECT_URI")
+                    .unwrap_or_else(|_| "http://localhost:8000/auth/oidc/callback".to_string());
+                let jwks_ttl = env::var("CODEX_OIDC_JWKS_CACHE_TTL")
+                    .ok()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(60 * 60);
+                let jwks_refresh = env::var("CODEX_OIDC_JWKS_CACHE_REFRESH")
+                    .ok()
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(60 * 5);
+
+                Some(OidcConfig {
+                    issuer,
+                    client_id,
+                    client_secret,
+                    redirect_uri,
+                    jwks_cache: JwksCacheSettings {
+                        ttl: Duration::from_secs(jwks_ttl),
+                        refresh: Duration::from_secs(jwks_refresh),
+                    },
+                })
+            }
+            _ => None,
+        };
+
         Self {
             secret_key,
             database_url,
@@ -40,6 +88,7 @@ impl AppConfig {
             artifact_base_url,
             access_token_expire_minutes,
             cors_origins,
+            oidc,
         }
     }
 

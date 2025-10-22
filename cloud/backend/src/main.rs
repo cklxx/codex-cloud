@@ -66,7 +66,7 @@ async fn serve(config: AppConfig, addr: String) -> Result<()> {
     prepare_environment(&config)?;
     let pool = db::connect(&config.database_url).await?;
     db::init_db(&pool).await?;
-    let state = AppState::new(pool, config);
+    let state = AppState::new(pool, config).await?;
     let app = app_router(state);
 
     let listener = TcpListener::bind(&addr).await?;

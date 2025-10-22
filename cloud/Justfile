@@ -1,0 +1,24 @@
+set shell := ["bash", "-cu"]
+
+alias up := dev
+alias down := stop
+
+DEV_COMPOSE ?= "docker compose -f docker-compose.yml --project-name codex-cloud"
+
+build:
+    {{DEV_COMPOSE}} build
+
+dev:
+    {{DEV_COMPOSE}} up
+
+stop:
+    {{DEV_COMPOSE}} down
+
+executor-base-image:
+    ./executor/scripts/build-base-image.sh
+
+executor-snapshot:
+    ./executor/scripts/create-snapshot.sh
+
+executor-refresh-pool:
+    ./executor/scripts/refresh-pool.sh

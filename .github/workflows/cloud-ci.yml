@@ -1,0 +1,124 @@
+name: Cloud CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloud/**'
+      - 'docs/cloud/**'
+      - '.github/workflows/cloud-ci.yml'
+      - 'codex-rs/**'
+  pull_request:
+    paths:
+      - 'cloud/**'
+      - 'docs/cloud/**'
+      - '.github/workflows/cloud-ci.yml'
+      - 'codex-rs/**'
+
+concurrency:
+  group: cloud-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+
+jobs:
+  backend:
+    name: Backend fmt & tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            cloud/backend/target
+          key: backend-${{ runner.os }}-${{ hashFiles('cloud/backend/Cargo.lock') }}
+      - name: Cargo fmt
+        working-directory: cloud/backend
+        run: cargo fmt --all -- --check
+      - name: Cargo test
+        working-directory: cloud/backend
+        run: cargo test --locked
+
+  frontend:
+    name: Frontend lint & tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.8.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: pnpm lint
+        run: pnpm --filter codex-cloud-frontend lint
+      - name: pnpm test
+        run: pnpm --filter codex-cloud-frontend test
+
+  supervisor:
+    name: Supervisor tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            cloud/supervisor/target
+          key: supervisor-${{ runner.os }}-${{ hashFiles('cloud/supervisor/Cargo.lock') }}
+      - name: Cargo test
+        working-directory: cloud/supervisor
+        run: cargo test --locked
+
+  docker-images:
+    name: Build Docker images
+    runs-on: ubuntu-latest
+    needs:
+      - backend
+      - frontend
+      - supervisor
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build backend image
+        run: docker build -t codex-cloud/backend:ci cloud/backend
+      - name: Build frontend image
+        run: docker build -t codex-cloud/frontend:ci cloud/frontend
+      - name: Build supervisor image
+        run: docker build -t codex-cloud/supervisor:ci cloud/supervisor
+
+  smoke-test:
+    name: CLI contract smoke test
+    runs-on: ubuntu-latest
+    needs: docker-images
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Ensure docker compose
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker-compose-plugin
+      - name: Compose up
+        run: |
+          docker compose -f cloud/docker-compose.yml up -d --build
+      - name: Wait for API
+        run: |
+          bash -c 'for i in {1..30}; do if curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then exit 0; fi; sleep 5; done; echo "API did not become ready" >&2; exit 1'
+      - name: Run CLI contract
+        run: |
+          chmod +x cloud/scripts/cli-contract.sh
+          ENV_ID=ci-smoke ATTEMPTS=1 cloud/scripts/cli-contract.sh
+      - name: Compose down
+        if: always()
+        run: docker compose -f cloud/docker-compose.yml down -v

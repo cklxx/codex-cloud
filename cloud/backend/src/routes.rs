@@ -1,10 +1,10 @@
 use std::str::FromStr;
 
-use axum::Json;
-use axum::Router;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderValue, Method, StatusCode};
 use axum::routing::{get, post};
+use axum::Json;
+use axum::Router;
 use chrono::Utc;
 use serde::Deserialize;
 use sqlx::sqlite::SqliteRow;
@@ -17,14 +17,14 @@ use crate::artifacts;
 use crate::db;
 use crate::error::AppError;
 use crate::models::{
-    AttemptCompleteRequest, AttemptCompleteResponse, AttemptRead, AttemptStatus, ClaimResponse,
-    CodexEnvironmentSummary, CodexInputItem, CodexTaskCreate, CodexTaskCreateResponse,
-    CreateUserRequest, CreateUserResponse, Environment, EnvironmentCreate, EnvironmentRead,
-    LoginRequest, Repository, RepositoryCreate, RepositoryRead, Task, TaskAttempt, TaskCreate,
-    TaskDetail, TaskListResponse, TaskStatus, User, claim_expiration, format_datetime,
-    parse_datetime,
+    claim_expiration, format_datetime, parse_datetime, AttemptCompleteRequest,
+    AttemptCompleteResponse, AttemptRead, AttemptStatus, ClaimResponse, CodexEnvironmentSummary,
+    CodexInputItem, CodexTaskCreate, CodexTaskCreateResponse, CreateUserRequest,
+    CreateUserResponse, Environment, EnvironmentCreate, EnvironmentRead, LoginRequest, Repository,
+    RepositoryCreate, RepositoryRead, Task, TaskAttempt, TaskCreate, TaskDetail, TaskListResponse,
+    TaskStatus, User,
 };
-use crate::security::{CurrentUser, create_access_token, hash_password, verify_password};
+use crate::security::{create_access_token, hash_password, verify_password, CurrentUser};
 use crate::state::AppState;
 
 #[derive(Debug, Deserialize)]
@@ -944,19 +944,23 @@ fn extract_codex_prompt(items: &[CodexInputItem]) -> Result<String, AppError> {
         if item.kind != "message" {
             continue;
         }
-        if let Some(role) = &item.role
-            && !role.eq_ignore_ascii_case("user")
-        {
-            continue;
+        if let Some(role) = &item.role {
+            if !role.eq_ignore_ascii_case("user") {
+                continue;
+            }
         }
         for fragment in &item.content {
-            if fragment
+            let is_text = fragment
                 .content_type
                 .as_deref()
                 .map(|ct| ct.eq_ignore_ascii_case("text"))
-                .unwrap_or(true)
-                && let Some(text) = fragment.text.as_ref()
-            {
+                .unwrap_or(true);
+
+            if !is_text {
+                continue;
+            }
+
+            if let Some(text) = fragment.text.as_ref() {
                 let trimmed = text.trim();
                 if !trimmed.is_empty() {
                     segments.push(trimmed.to_string());

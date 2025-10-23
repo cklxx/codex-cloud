@@ -8,7 +8,7 @@ use codex_cloud_backend::config::{JwksCacheSettings, OidcConfig};
 use codex_cloud_backend::db::{self, ExternalIdentitySeed};
 use codex_cloud_backend::error::AppError;
 use codex_cloud_backend::models::TokenResponse;
-use codex_cloud_backend::security::{OidcProvider, decode_token};
+use codex_cloud_backend::security::{decode_token, OidcProvider};
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use serde_json::json;
 use uuid::Uuid;

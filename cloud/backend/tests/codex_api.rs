@@ -79,13 +79,11 @@ async fn codex_compatibility_endpoints_create_task() {
         .unwrap();
     assert!(environments.status().is_success());
     let env_list = environments.json::<serde_json::Value>().await.unwrap();
-    assert!(
-        env_list
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|item| item["id"] == "local-dev")
-    );
+    assert!(env_list
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["id"] == "local-dev"));
 
     let by_repo = app
         .client

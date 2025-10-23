@@ -94,7 +94,7 @@ jobs:
       - name: Build backend image
         run: docker build -t codex-cloud/backend:ci cloud/backend
       - name: Build frontend image
-        run: docker build -t codex-cloud/frontend:ci cloud/frontend
+        run: docker build -t codex-cloud/frontend:ci -f cloud/frontend/Dockerfile .
       - name: Build supervisor image
         run: docker build -t codex-cloud/supervisor:ci cloud/supervisor
 

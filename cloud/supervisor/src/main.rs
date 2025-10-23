@@ -614,6 +614,18 @@ fn init_tracing() {
     tracing::subscriber::set_global_default(subscriber).expect("global tracing subscriber");
 }
 
+#[tokio::main]
+async fn main() -> Result<()> {
+    init_tracing();
+    let args = Args::parse();
+    let supervisor = Supervisor::new(args.into()).await?;
+    if let Err(err) = supervisor.run().await {
+        error!(error = %err, "Supervisor exited with error");
+        return Err(err);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -779,16 +791,4 @@ echo "${CODEX_SNAPSHOT_TEMPLATE:-snapshot}-warm"
         assert!(cache_root.join("git").exists());
         assert!(cache_root.join("npm").exists());
     }
-}
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    init_tracing();
-    let args = Args::parse();
-    let supervisor = Supervisor::new(args.into()).await?;
-    if let Err(err) = supervisor.run().await {
-        error!(error = %err, "Supervisor exited with error");
-        return Err(err);
-    }
-    Ok(())
 }

@@ -9,15 +9,26 @@ use tempfile::TempDir;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 
+#[allow(dead_code)]
 pub struct TestApp {
     pub client: Client,
     pub base_url: String,
+    pub pool: sqlx::SqlitePool,
+    pub config: AppConfig,
     shutdown_tx: Option<oneshot::Sender<()>>,
     _tmpdir: TempDir,
 }
 
 impl TestApp {
+    #[allow(dead_code)]
     pub async fn spawn() -> Self {
+        Self::spawn_with(|_| {}).await
+    }
+
+    pub async fn spawn_with<F>(configure: F) -> Self
+    where
+        F: FnOnce(&mut AppConfig),
+    {
         let tmp = TempDir::new().unwrap();
         let artifact_dir = tmp.path().join("artifacts");
         let db_path = tmp.path().join("codex.db");
@@ -29,7 +40,9 @@ impl TestApp {
             artifact_base_url: "http://127.0.0.1:0/artifacts".to_string(),
             access_token_expire_minutes: 60,
             cors_origins: vec!["*".to_string()],
+            oidc: None,
         };
+        configure(&mut config);
         config.ensure_artifact_dir().unwrap();
 
         let pool = db::connect(&config.database_url).await.unwrap();
@@ -39,8 +52,11 @@ impl TestApp {
         let addr = listener.local_addr().unwrap();
         let base_url = format!("http://{}:{}", addr.ip(), addr.port());
         config.artifact_base_url = format!("{base_url}/artifacts");
+        if let Some(oidc) = config.oidc.as_mut() {
+            oidc.redirect_uri = format!("{base_url}/auth/oidc/callback");
+        }
 
-        let state = AppState::new(pool, config);
+        let state = AppState::new(pool.clone(), config.clone()).await.unwrap();
         let app = app_router(state);
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -59,9 +75,20 @@ impl TestApp {
             .build()
             .unwrap();
 
+        for attempt in 0..10 {
+            let health_url = format!("{}/health", base_url);
+            match client.get(&health_url).send().await {
+                Ok(response) if response.status().is_success() => break,
+                _ if attempt == 9 => panic!("server did not start"),
+                _ => tokio::time::sleep(Duration::from_millis(50)).await,
+            }
+        }
+
         Self {
             client,
             base_url,
+            pool,
+            config,
             shutdown_tx: Some(shutdown_tx),
             _tmpdir: tmp,
         }

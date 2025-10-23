@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,6 +13,12 @@ use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tracing::{error, info, warn};
 use uuid::Uuid;
+
+mod pool;
+mod runner;
+
+use pool::{LifecycleHook, PoolSettings, SnapshotPool};
+use runner::Runner;
 
 #[derive(Debug, Parser)]
 #[command(author, version, about = "Codex Cloud task supervisor", long_about = None)]
@@ -47,19 +54,43 @@ struct Args {
     /// Maximum number of attempts to execute concurrently
     #[arg(long, env = "CODEX_CLOUD_MAX_CONCURRENCY", default_value_t = 1)]
     max_concurrency: usize,
+
+    /// Desired size of the prewarmed snapshot pool
+    #[arg(long, env = "CODEX_CLOUD_SNAPSHOT_POOL_SIZE", default_value_t = 1)]
+    snapshot_pool_size: usize,
+
+    /// Template identifier passed to snapshot hooks
+    #[arg(long, env = "CODEX_CLOUD_SNAPSHOT_TEMPLATE")]
+    snapshot_template: Option<String>,
+
+    /// Optional path to a lifecycle hook that provisions snapshots
+    #[arg(long, env = "CODEX_CLOUD_PREWARM_HOOK")]
+    prewarm_hook: Option<PathBuf>,
+
+    /// Root directory used for dependency caches
+    #[arg(
+        long,
+        env = "CODEX_CLOUD_CACHE_ROOT",
+        default_value = "/var/cache/codex"
+    )]
+    cache_root: PathBuf,
 }
 
 #[derive(Debug, Clone)]
-struct Config {
+struct AppConfig {
     api_base: String,
     email: String,
     password: String,
     poll_interval: Duration,
     environment_id: Option<String>,
     max_concurrency: usize,
+    snapshot_pool_size: usize,
+    snapshot_template: Option<String>,
+    prewarm_hook: Option<PathBuf>,
+    cache_root: PathBuf,
 }
 
-impl From<Args> for Config {
+impl From<Args> for AppConfig {
     fn from(args: Args) -> Self {
         Self {
             api_base: args.api_base.trim_end_matches('/').to_string(),
@@ -68,7 +99,28 @@ impl From<Args> for Config {
             poll_interval: Duration::from_secs(args.poll_interval.max(1)),
             environment_id: args.environment_id,
             max_concurrency: args.max_concurrency.max(1),
+            snapshot_pool_size: args.snapshot_pool_size,
+            snapshot_template: args.snapshot_template,
+            prewarm_hook: args.prewarm_hook,
+            cache_root: args.cache_root,
         }
+    }
+}
+
+impl AppConfig {
+    fn pool_settings(&self) -> PoolSettings {
+        PoolSettings {
+            size: self.snapshot_pool_size,
+            template: self.snapshot_template.clone(),
+            prewarm_hook: self
+                .prewarm_hook
+                .as_ref()
+                .map(|path| LifecycleHook::new(path.clone())),
+        }
+    }
+
+    fn cache_root(&self) -> PathBuf {
+        self.cache_root.clone()
     }
 }
 
@@ -92,36 +144,36 @@ enum AttemptStatus {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct TaskListResponse {
-    id: Uuid,
-    title: String,
+pub(crate) struct TaskListResponse {
+    pub(crate) id: Uuid,
+    pub(crate) title: String,
     #[serde(default)]
-    environment_id: Option<String>,
+    pub(crate) environment_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct TaskDetailResponse {
-    id: Uuid,
-    title: String,
+pub(crate) struct TaskDetailResponse {
+    pub(crate) id: Uuid,
+    pub(crate) title: String,
     #[serde(default)]
-    description: Option<String>,
+    pub(crate) description: Option<String>,
     #[serde(default)]
-    environment_id: Option<String>,
+    pub(crate) environment_id: Option<String>,
     #[serde(default)]
-    repository: Option<RepositorySummary>,
+    pub(crate) repository: Option<RepositorySummary>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct RepositorySummary {
-    id: Uuid,
-    name: String,
-    git_url: String,
-    default_branch: String,
+pub(crate) struct RepositorySummary {
+    pub(crate) id: Uuid,
+    pub(crate) name: String,
+    pub(crate) git_url: String,
+    pub(crate) default_branch: String,
 }
 
 #[derive(Debug, Deserialize)]
-struct AttemptRead {
-    id: Uuid,
+pub(crate) struct AttemptRead {
+    pub(crate) id: Uuid,
 }
 
 #[derive(Debug, Serialize)]
@@ -142,21 +194,23 @@ struct TokenResponse {
     access_token: String,
 }
 
-struct AttemptContext {
-    task: TaskListResponse,
-    attempt: AttemptRead,
-    detail: Option<TaskDetailResponse>,
+pub(crate) struct AttemptContext {
+    pub(crate) task: TaskListResponse,
+    pub(crate) attempt: AttemptRead,
+    pub(crate) detail: Option<TaskDetailResponse>,
 }
 
-struct AttemptArtifacts {
-    diff: Option<String>,
-    log: Option<String>,
+pub(crate) struct AttemptArtifacts {
+    pub(crate) diff: Option<String>,
+    pub(crate) log: Option<String>,
 }
 
 struct SupervisorInner {
     client: Client,
-    config: Config,
+    config: AppConfig,
     token: RwLock<String>,
+    pool: SnapshotPool,
+    runner: Runner,
 }
 
 #[derive(Clone)]
@@ -165,7 +219,7 @@ struct Supervisor {
 }
 
 impl Supervisor {
-    async fn new(config: Config) -> Result<Self> {
+    async fn new(config: AppConfig) -> Result<Self> {
         let client = Client::builder()
             .user_agent("codex-cloud-supervisor/0.1.0")
             .build()?;
@@ -173,11 +227,24 @@ impl Supervisor {
 
         info!("Initial access token acquired");
 
+        let pool = SnapshotPool::new(config.pool_settings());
+        pool.ensure_warm_capacity().await?;
+        let metrics = pool.metrics().await;
+        info!(
+            warm = metrics.warm,
+            target = metrics.target,
+            "Snapshot pool initialised"
+        );
+
+        let runner = Runner::new(config.cache_root()).await?;
+
         Ok(Self {
             inner: Arc::new(SupervisorInner {
                 client,
                 config,
                 token: RwLock::new(token),
+                pool,
+                runner,
             }),
         })
     }
@@ -207,8 +274,16 @@ impl Supervisor {
         &self.inner.client
     }
 
-    fn config(&self) -> &Config {
+    fn config(&self) -> &AppConfig {
         &self.inner.config
+    }
+
+    fn pool(&self) -> &SnapshotPool {
+        &self.inner.pool
+    }
+
+    fn runner(&self) -> &Runner {
+        &self.inner.runner
     }
 
     async fn process_cycle(&self) -> Result<()> {
@@ -376,16 +451,17 @@ impl Supervisor {
     }
 
     async fn run_attempt(&self, context: &AttemptContext) -> Result<AttemptArtifacts> {
-        let timestamp = Utc::now().to_rfc3339();
-        let detail = context.detail.as_ref();
-
-        let diff = build_placeholder_diff(&context.task, detail, &timestamp);
-        let log = build_execution_log(context, &timestamp);
-
-        Ok(AttemptArtifacts {
-            diff: Some(diff),
-            log: Some(log),
-        })
+        let lease = self.pool().checkout().await?;
+        match self.runner().execute(context, &lease).await {
+            Ok(artifacts) => {
+                self.pool().recycle(lease).await?;
+                Ok(artifacts)
+            }
+            Err(err) => {
+                self.pool().discard(lease).await?;
+                Err(err)
+            }
+        }
     }
 
     async fn complete_attempt(
@@ -494,7 +570,7 @@ impl Supervisor {
         Ok(())
     }
 
-    async fn authenticate(client: &Client, config: &Config) -> Result<String> {
+    async fn authenticate(client: &Client, config: &AppConfig) -> Result<String> {
         let login_url = format!("{}/auth/session", config.api_base);
         let response = client
             .post(login_url)
@@ -531,70 +607,6 @@ where
     })
 }
 
-fn build_placeholder_diff(
-    task: &TaskListResponse,
-    detail: Option<&TaskDetailResponse>,
-    timestamp: &str,
-) -> String {
-    let mut diff = String::new();
-    diff.push_str("diff --git a/TASK_LOG.md b/TASK_LOG.md\n");
-    diff.push_str("--- a/TASK_LOG.md\n");
-    diff.push_str("+++ b/TASK_LOG.md\n");
-    diff.push_str("@@\n");
-    diff.push_str(&format!("+## Task {} ({})\n", task.id, task.title));
-    diff.push_str(&format!(
-        "+Processed at {timestamp} UTC by codex-cloud-supervisor\\n"
-    ));
-
-    if let Some(detail) = detail {
-        diff.push_str(&format!("+Detail ID: {}\\n", detail.id));
-        diff.push_str(&format!("+Snapshot title: {}\\n", detail.title));
-        if let Some(environment_id) = &detail.environment_id {
-            diff.push_str(&format!("+Environment: {}\\n", environment_id));
-        }
-        if let Some(repository) = &detail.repository {
-            diff.push_str(&format!(
-                "+Repository: {} ({}) on branch {} (id {})\\n",
-                repository.name, repository.git_url, repository.default_branch, repository.id
-            ));
-        }
-        if let Some(description) = &detail.description {
-            for line in description.lines() {
-                diff.push_str("+> ");
-                diff.push_str(line);
-                diff.push('\n');
-            }
-        }
-    }
-
-    diff
-}
-
-fn build_execution_log(context: &AttemptContext, timestamp: &str) -> String {
-    let mut log = format!(
-        "[{timestamp}] Attempt {} succeeded for task {} ({})",
-        context.attempt.id, context.task.id, context.task.title
-    );
-
-    if let Some(detail) = &context.detail {
-        if let Some(repository) = &detail.repository {
-            log.push_str(&format!(
-                "\nRepository: {} ({}) default branch {} (id {})",
-                repository.name, repository.git_url, repository.default_branch, repository.id
-            ));
-        }
-        if let Some(environment_id) = &detail.environment_id {
-            log.push_str(&format!("\nEnvironment: {}", environment_id));
-        }
-        if let Some(description) = &detail.description {
-            log.push_str("\nTask description:\n");
-            log.push_str(description);
-        }
-    }
-
-    log
-}
-
 fn init_tracing() {
     let subscriber = tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -602,10 +614,26 @@ fn init_tracing() {
     tracing::subscriber::set_global_default(subscriber).expect("global tracing subscriber");
 }
 
+#[tokio::main]
+async fn main() -> Result<()> {
+    init_tracing();
+    let args = Args::parse();
+    let supervisor = Supervisor::new(args.into()).await?;
+    if let Err(err) = supervisor.run().await {
+        error!(error = %err, "Supervisor exited with error");
+        return Err(err);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::tempdir;
     use wiremock::matchers::{method, path, path_regex, query_param};
     use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -685,13 +713,40 @@ mod tests {
             .mount(&server)
             .await;
 
-        let config = Config {
+        let temp = tempdir().expect("temp dir");
+        let hook_path = temp.path().join("prewarm.sh");
+        fs::write(
+            &hook_path,
+            r#"#!/usr/bin/env bash
+set -euo pipefail
+STATE_DIR="$(cd "$(dirname "$0")" && pwd)"
+echo prewarm:${CODEX_SNAPSHOT_TEMPLATE:-unset} >> "${STATE_DIR}/hook.log"
+echo "${CODEX_SNAPSHOT_TEMPLATE:-snapshot}-warm"
+"#,
+        )
+        .expect("write hook script");
+        #[cfg(unix)]
+        {
+            let mut perms = fs::metadata(&hook_path)
+                .expect("hook metadata")
+                .permissions();
+            perms.set_mode(0o755);
+            fs::set_permissions(&hook_path, perms).expect("set hook permissions");
+        }
+
+        let cache_root = temp.path().join("cache");
+
+        let config = AppConfig {
             api_base: server.uri(),
             email: "worker@example.com".into(),
             password: "password".into(),
             poll_interval: Duration::from_secs(1),
             environment_id: None,
             max_concurrency: 1,
+            snapshot_pool_size: 1,
+            snapshot_template: Some("integration-template".to_string()),
+            prewarm_hook: Some(hook_path.clone()),
+            cache_root: cache_root.clone(),
         };
 
         let supervisor = Supervisor::new(config).await.expect("supervisor init");
@@ -718,22 +773,22 @@ mod tests {
         assert!(diff.contains(&task_id.to_string()));
         assert!(diff.contains("Demo Task"));
         assert!(diff.contains("demo-repo"));
+        assert!(diff.contains("Using snapshot: integration-template-warm"));
+        assert!(diff.contains(cache_root.to_string_lossy().as_ref()));
 
         let log = body["log"].as_str().expect("log text present");
         assert!(log.contains(&attempt_id.to_string()));
         assert!(log.contains("Demo Task"));
         assert!(log.contains("demo-repo"));
-    }
-}
+        assert!(log.contains("Using prewarmed snapshot: integration-template-warm"));
+        assert!(log.contains("Cache hits:"));
+        assert!(log.contains("Git mirror"));
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    init_tracing();
-    let args = Args::parse();
-    let supervisor = Supervisor::new(args.into()).await?;
-    if let Err(err) = supervisor.run().await {
-        error!(error = %err, "Supervisor exited with error");
-        return Err(err);
+        let hook_log_path = temp.path().join("hook.log");
+        let hook_log = fs::read_to_string(&hook_log_path).expect("hook log");
+        assert!(hook_log.contains("prewarm:integration-template"));
+
+        assert!(cache_root.join("git").exists());
+        assert!(cache_root.join("npm").exists());
     }
-    Ok(())
 }

@@ -14,6 +14,7 @@ use tower_http::trace::TraceLayer;
 use uuid::Uuid;
 
 use crate::artifacts;
+use crate::db;
 use crate::error::AppError;
 use crate::models::{
     AttemptCompleteRequest, AttemptCompleteResponse, AttemptRead, AttemptStatus, ClaimResponse,
@@ -64,6 +65,7 @@ fn auth_routes() -> Router<AppState> {
     Router::new()
         .route("/users", post(create_user))
         .route("/session", post(login))
+        .route("/oidc/callback", get(oidc_callback))
 }
 
 async fn create_user(
@@ -133,6 +135,33 @@ async fn login(
     let id: String = row.try_get("id")?;
     let user_id = Uuid::parse_str(&id).map_err(|_| AppError::bad_request("Invalid user id"))?;
     let token = create_access_token(user_id, &state.config)?;
+    Ok(Json(crate::models::TokenResponse {
+        access_token: token,
+        token_type: "bearer".to_string(),
+    }))
+}
+
+#[derive(Debug, Deserialize)]
+struct OidcCallbackQuery {
+    code: String,
+}
+
+async fn oidc_callback(
+    State(state): State<AppState>,
+    Query(query): Query<OidcCallbackQuery>,
+) -> Result<Json<crate::models::TokenResponse>, AppError> {
+    let provider = state
+        .oidc
+        .as_ref()
+        .ok_or_else(|| AppError::bad_request("OpenID Connect not configured"))?;
+
+    let id_token = provider.exchange_code(&query.code).await?;
+    let claims = provider.validate_id_token(&id_token).await?;
+    let user = db::find_user_by_external_identity(&state.pool, provider.issuer(), &claims.subject)
+        .await?
+        .ok_or_else(|| AppError::unauthorized("No account linked to external identity"))?;
+
+    let token = create_access_token(user.id, &state.config)?;
     Ok(Json(crate::models::TokenResponse {
         access_token: token,
         token_type: "bearer".to_string(),
@@ -926,12 +955,11 @@ fn extract_codex_prompt(items: &[CodexInputItem]) -> Result<String, AppError> {
                 .as_deref()
                 .map(|ct| ct.eq_ignore_ascii_case("text"))
                 .unwrap_or(true)
+                && let Some(text) = fragment.text.as_ref()
             {
-                if let Some(text) = fragment.text.as_ref() {
-                    let trimmed = text.trim();
-                    if !trimmed.is_empty() {
-                        segments.push(trimmed.to_string());
-                    }
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    segments.push(trimmed.to_string());
                 }
             }
         }

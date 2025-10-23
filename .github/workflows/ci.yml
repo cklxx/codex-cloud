@@ -63,3 +63,53 @@ jobs:
 
       - name: Prettier (run `pnpm run format:fix` to fix)
         run: pnpm run format
+
+  cli-contract:
+    needs: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Start Codex Cloud API
+        run: |
+          docker compose -f cloud/docker-compose.yml up -d api
+
+      - name: Wait for API health endpoint
+        run: |
+          for i in {1..60}; do
+            if curl -sSf http://127.0.0.1:8000/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API did not become healthy in time" >&2
+          docker compose -f cloud/docker-compose.yml logs api || true
+          exit 1
+
+      - name: Run CLI contract test suite
+        env:
+          API_BASE: http://127.0.0.1:8000
+          CODEX_BASE: http://127.0.0.1:8000/api/codex
+          ARTIFACT_DIR: ${{ runner.temp }}/cli-contract
+        run: cloud/scripts/cli-contract.sh
+
+      - name: Upload CLI contract artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-contract-artifacts
+          path: ${{ runner.temp }}/cli-contract
+          if-no-files-found: warn
+
+      - name: Collect API logs on failure
+        if: failure()
+        run: docker compose -f cloud/docker-compose.yml logs api
+
+      - name: Tear down Compose stack
+        if: always()
+        run: docker compose -f cloud/docker-compose.yml down

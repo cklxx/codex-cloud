@@ -17,7 +17,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_SCRIPT = REPO_ROOT / "codex-cli" / "scripts" / "build_npm_package.py"
 INSTALL_NATIVE_DEPS = REPO_ROOT / "codex-cli" / "scripts" / "install_native_deps.py"
 WORKFLOW_NAME = ".github/workflows/rust-release.yml"
-GITHUB_REPO = "openai/codex"
 
 _SPEC = importlib.util.spec_from_file_location("codex_build_npm_package", BUILD_SCRIPT)
 if _SPEC is None or _SPEC.loader is None:
@@ -66,28 +65,65 @@ def collect_native_components(packages: list[str]) -> set[str]:
     return components
 
 
+def list_release_workflows(branch: str | None = None) -> list[dict]:
+    cmd = [
+        "gh",
+        "run",
+        "list",
+        "--workflow",
+        WORKFLOW_NAME,
+        "--json",
+        "headBranch,displayTitle,url,headSha",
+        "--limit",
+        "50",
+    ]
+    if branch:
+        cmd.extend(["--branch", branch])
+
+    stdout = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)
+    workflows = json.loads(stdout or "[]")
+    if not isinstance(workflows, list):
+        raise RuntimeError("Unexpected response when listing release workflows.")
+    return workflows
+
+
 def resolve_release_workflow(version: str) -> dict:
-    stdout = subprocess.check_output(
-        [
-            "gh",
-            "run",
-            "list",
-            "--branch",
-            f"rust-v{version}",
-            "--json",
-            "workflowName,url,headSha",
-            "--workflow",
-            WORKFLOW_NAME,
-            "--jq",
-            "first(.[])",
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-    )
-    workflow = json.loads(stdout or "null")
-    if not workflow:
-        raise RuntimeError(f"Unable to find rust-release workflow for version {version}.")
-    return workflow
+    normalized = version.strip()
+    if not normalized:
+        raise RuntimeError("Release version must not be empty.")
+
+    candidate_branches: list[str] = []
+    candidate_branches.append(f"rust-v{normalized}")
+
+    lower = normalized.lower()
+    if lower.startswith("rust-"):
+        candidate_branches.append(lower)
+        candidate_branches.append(lower.removeprefix("rust-"))
+    else:
+        candidate_branches.append(lower)
+        candidate_branches.append(f"rust-{lower}")
+
+    seen: set[str] = set()
+    for branch in candidate_branches:
+        branch = branch.strip()
+        if not branch or branch in seen:
+            continue
+        seen.add(branch)
+        workflows = list_release_workflows(branch)
+        if workflows:
+            return workflows[0]
+
+    workflows = list_release_workflows()
+    lower_version = lower
+    for workflow in workflows:
+        head_branch = str(workflow.get("headBranch", "")).lower()
+        display_title = str(workflow.get("displayTitle", "")).lower()
+        if lower_version == head_branch or lower_version == display_title:
+            return workflow
+        if lower_version in head_branch or lower_version in display_title:
+            return workflow
+
+    raise RuntimeError(f"Unable to find rust-release workflow for version {version}.")
 
 
 def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str | None]:

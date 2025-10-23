@@ -21,7 +21,7 @@ impl TestCodexExecBuilder {
     pub fn cmd_with_server(&self, server: &MockServer) -> assert_cmd::Command {
         let mut cmd = self.cmd();
         let base = format!("{}/v1", server.uri());
-        cmd.env("OPENAI_BASE_URL", base);
+        cmd.env("CODEX_API_BASE_URL", base);
         cmd
     }
 

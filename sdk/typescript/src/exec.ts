@@ -66,7 +66,7 @@ export class CodexExec {
       env[INTERNAL_ORIGINATOR_ENV] = TYPESCRIPT_SDK_ORIGINATOR;
     }
     if (args.baseUrl) {
-      env.OPENAI_BASE_URL = args.baseUrl;
+      env.CODEX_API_BASE_URL = args.baseUrl;
     }
     if (args.apiKey) {
       env.CODEX_API_KEY = args.apiKey;

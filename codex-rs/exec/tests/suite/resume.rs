@@ -81,7 +81,7 @@ fn exec_resume_last_appends_to_existing_file() -> anyhow::Result<()> {
 
     test.cmd()
         .env("CODEX_RS_SSE_FIXTURE", &fixture)
-        .env("OPENAI_BASE_URL", "http://unused.local")
+        .env("CODEX_API_BASE_URL", "http://unused.local")
         .arg("--skip-git-repo-check")
         .arg("-C")
         .arg(env!("CARGO_MANIFEST_DIR"))
@@ -100,7 +100,7 @@ fn exec_resume_last_appends_to_existing_file() -> anyhow::Result<()> {
 
     test.cmd()
         .env("CODEX_RS_SSE_FIXTURE", &fixture)
-        .env("OPENAI_BASE_URL", "http://unused.local")
+        .env("CODEX_API_BASE_URL", "http://unused.local")
         .arg("--skip-git-repo-check")
         .arg("-C")
         .arg(env!("CARGO_MANIFEST_DIR"))
@@ -135,7 +135,7 @@ fn exec_resume_by_id_appends_to_existing_file() -> anyhow::Result<()> {
 
     test.cmd()
         .env("CODEX_RS_SSE_FIXTURE", &fixture)
-        .env("OPENAI_BASE_URL", "http://unused.local")
+        .env("CODEX_API_BASE_URL", "http://unused.local")
         .arg("--skip-git-repo-check")
         .arg("-C")
         .arg(env!("CARGO_MANIFEST_DIR"))
@@ -158,7 +158,7 @@ fn exec_resume_by_id_appends_to_existing_file() -> anyhow::Result<()> {
 
     test.cmd()
         .env("CODEX_RS_SSE_FIXTURE", &fixture)
-        .env("OPENAI_BASE_URL", "http://unused.local")
+        .env("CODEX_API_BASE_URL", "http://unused.local")
         .arg("--skip-git-repo-check")
         .arg("-C")
         .arg(env!("CARGO_MANIFEST_DIR"))
@@ -191,7 +191,7 @@ fn exec_resume_preserves_cli_configuration_overrides() -> anyhow::Result<()> {
 
     test.cmd()
         .env("CODEX_RS_SSE_FIXTURE", &fixture)
-        .env("OPENAI_BASE_URL", "http://unused.local")
+        .env("CODEX_API_BASE_URL", "http://unused.local")
         .arg("--skip-git-repo-check")
         .arg("--sandbox")
         .arg("workspace-write")
@@ -213,7 +213,7 @@ fn exec_resume_preserves_cli_configuration_overrides() -> anyhow::Result<()> {
     let output = test
         .cmd()
         .env("CODEX_RS_SSE_FIXTURE", &fixture)
-        .env("OPENAI_BASE_URL", "http://unused.local")
+        .env("CODEX_API_BASE_URL", "http://unused.local")
         .arg("--skip-git-repo-check")
         .arg("--sandbox")
         .arg("workspace-write")

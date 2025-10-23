@@ -61,7 +61,7 @@ async fn chat_mode_stream_cli() {
         .arg("hello?");
     cmd.env("CODEX_HOME", home.path())
         .env("OPENAI_API_KEY", "dummy")
-        .env("OPENAI_BASE_URL", format!("{}/v1", server.uri()));
+        .env("CODEX_API_BASE_URL", format!("{}/v1", server.uri()));
 
     let output = cmd.output().unwrap();
     println!("Status: {}", output.status);
@@ -149,7 +149,7 @@ async fn exec_cli_applies_experimental_instructions_file() {
         .arg("hello?\n");
     cmd.env("CODEX_HOME", home.path())
         .env("OPENAI_API_KEY", "dummy")
-        .env("OPENAI_BASE_URL", format!("{}/v1", server.uri()));
+        .env("CODEX_API_BASE_URL", format!("{}/v1", server.uri()));
 
     let output = cmd.output().unwrap();
     println!("Status: {}", output.status);
@@ -200,7 +200,7 @@ async fn responses_api_stream_cli() {
     cmd.env("CODEX_HOME", home.path())
         .env("OPENAI_API_KEY", "dummy")
         .env("CODEX_RS_SSE_FIXTURE", fixture)
-        .env("OPENAI_BASE_URL", "http://unused.local");
+        .env("CODEX_API_BASE_URL", "http://unused.local");
 
     let output = cmd.output().unwrap();
     assert!(output.status.success());
@@ -242,7 +242,7 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
         .env("OPENAI_API_KEY", "dummy")
         .env("CODEX_RS_SSE_FIXTURE", &fixture)
         // Required for CLI arg parsing even though fixture short-circuits network usage.
-        .env("OPENAI_BASE_URL", "http://unused.local");
+        .env("CODEX_API_BASE_URL", "http://unused.local");
 
     let output = cmd.output().unwrap();
     assert!(
@@ -368,7 +368,7 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
     cmd2.env("CODEX_HOME", home.path())
         .env("OPENAI_API_KEY", "dummy")
         .env("CODEX_RS_SSE_FIXTURE", &fixture)
-        .env("OPENAI_BASE_URL", "http://unused.local");
+        .env("CODEX_API_BASE_URL", "http://unused.local");
 
     let output2 = cmd2.output().unwrap();
     assert!(output2.status.success(), "resume codex-cli run failed");

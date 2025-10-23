@@ -1,125 +1,121 @@
-<p align="center"><code>npm i -g @openai/codex</code><br />or <code>brew install codex</code></p>
+# Codex Cloud - Independent Edition
 
-<p align="center"><strong>Codex CLI</strong> is a coding agent from OpenAI that runs locally on your computer.
-</br>
-</br>If you want Codex in your code editor (VS Code, Cursor, Windsurf), <a href="https://developers.openai.com/codex/ide">install in your IDE</a>
-</br>If you are looking for the <em>cloud-based agent</em> from OpenAI, <strong>Codex Web</strong>, go to <a href="https://chatgpt.com/codex">chatgpt.com/codex</a></p>
+Codex Cloud is an independently maintained fork of the original Codex developer agent. It keeps the local-first command line experience while providing self-hostable services for task orchestration, artifact storage, and the web dashboard.
 
-<p align="center">
-  <img src="./.github/codex-cli-splash.png" alt="Codex CLI splash" width="80%" />
-  </p>
+The goal of this project is to offer a complete, vendor-neutral stack that can run on personal hardware. All build scripts, documentation, and packaging live in this repository so that you can bootstrap the tooling without relying on upstream releases.
 
----
+## Table of contents
 
-## Quickstart
+- [Highlights](#highlights)
+- [Installation](#installation)
+  - [CLI from source](#cli-from-source)
+  - [Docker images and packaged releases](#docker-images-and-packaged-releases)
+- [Usage](#usage)
+- [Self-hosted Codex Cloud stack](#self-hosted-codex-cloud-stack)
+- [Development](#development)
+- [Project structure](#project-structure)
+- [Community and support](#community-and-support)
+- [License](#license)
 
-### Installing and running Codex CLI
+## Highlights
 
-Install globally with your preferred package manager. If you use npm:
+- Local agent workflow powered by the Rust binaries that ship with the CLI package.
+- Task browser and orchestration backend that you can deploy locally or with Docker.
+- TypeScript SDK, documented HTTP APIs, and automation hooks for customization.
+- Batteries-included workspace that uses pnpm and Cargo with reproducible scripts.
 
-```shell
-npm install -g @openai/codex
+## Installation
+
+Codex Cloud packages are published under the `codex-cloud-*` namespace. Until public packages are available, you can install the CLI directly from source.
+
+### CLI from source
+
+```bash
+# Clone this repository
+git clone https://github.com/cklxx/codex-cloud.git
+cd codex-cloud
+
+# Install JavaScript dependencies
+pnpm install
+
+# Build the vendored Rust binary and stage the CLI wrapper
+python codex-cli/scripts/install_native_deps.py --platform "$(uname -s | tr '[:upper:]' '[:lower:]')"
 ```
 
-Alternatively, if you use Homebrew:
+The CLI entry point is `codex-cli/bin/codex.js`. Symlink it somewhere on your `PATH` to launch Codex Cloud from the terminal:
 
-```shell
-brew install codex
+```bash
+ln -s "$(pwd)/codex-cli/bin/codex.js" ~/.local/bin/codex
 ```
 
-Then simply run `codex` to get started:
+Running `codex` will start the interactive agent with the bundled Rust binary.
 
-```shell
-codex
-```
+### Docker images and packaged releases
 
-### Codex Cloud mode
+This repository publishes releases that include:
 
-To browse and apply Codex Cloud tasks from the CLI, run the interactive browser:
+- Platform-specific archives of the Rust CLI binary.
+- A staged npm tarball for the JavaScript wrapper.
+- Docker images for the cloud backend and frontend.
 
-```shell
+See [docs/release_management.md](./docs/release_management.md) for the end-to-end publishing checklist.
+
+## Usage
+
+Run `codex` to launch the interactive agent. The CLI exposes the same subcommands as the upstream project, with defaults tuned for the independent stack.
+
+To browse Codex Cloud tasks from the terminal, launch the embedded task browser:
+
+```bash
 codex --cloud
 ```
 
-Set `CODEX_CLOUD_DEFAULT=1` (or `true`, `yes`, `on`) to make the Codex Cloud task browser the default experience when invoking `codex` without subcommands. See [Codex Cloud architecture](./docs/codex-cloud.md) for details about how the CLI interacts with the hosted service. 要在私有环境中复刻 Codex Cloud，请参考[最小可行版本设计](./docs/codex-cloud-mvp.md)以及更完整的[自建方案蓝图](./docs/codex-cloud-replication-plan.md)。当前路线图明确“先实现 MVP 版本”，相关冲刺节奏与进度更新见 MVP 文档中的[实施启动计划](./docs/codex-cloud-mvp.md#11-实施启动计划)。
+Set the `CODEX_CLOUD_DEFAULT` environment variable to `1` to make the task browser the default entry point. Advanced configuration options are documented in [docs/config.md](./docs/config.md).
 
-### Self-hosted Codex Cloud MVP stack
+## Self-hosted Codex Cloud stack
 
-The repository now includes the first runnable building blocks for the single-machine Codex Cloud MVP described in the docs.
+The `cloud` directory contains the services required to run Codex Cloud end to end. To boot the stack on a single machine:
 
-1. Copy `cloud/.env.example` to `cloud/.env` and adjust secrets or database settings as needed.
-2. From the repo root run `make -C cloud dev` (or `docker compose -f cloud/docker-compose.yml up`) to build and start the Rust API (`http://localhost:8000`) and the Next.js frontend (`http://localhost:3000`). SQLite data and artifacts persist in the mounted `codex-data` volume.
-3. Once the containers are ready, create a bootstrap user with `docker compose -f cloud/docker-compose.yml exec api codex-cloud-backend create-admin <email> <password>` and then sign in via the web UI.
-4. Point the CLI at `http://localhost:8000` via `CODEX_CLOUD_TASKS_BASE_URL` or explore the task list, detail, creation, and attempt flows directly in the browser.
+1. Copy `cloud/.env.example` to `cloud/.env` and fill in secrets.
+2. From the repository root, run `make -C cloud dev` (or `docker compose -f cloud/docker-compose.yml up`).
+3. Create an admin user with `docker compose -f cloud/docker-compose.yml exec api codex-cloud-backend create-admin <email> <password>`.
+4. Point the CLI at `http://localhost:8000` using `CODEX_CLOUD_TASKS_BASE_URL`, or access the web UI at `http://localhost:3000`.
 
-Automated coverage for the happy-path workflow lives in `cloud/backend/tests/task_flow.rs`; run it locally with `cargo test` from the `cloud/backend` directory. The frontend builds with `pnpm --filter codex-cloud-frontend build`.
+Automated coverage for the task workflow lives in `cloud/backend/tests/task_flow.rs`. Build and test it with `cargo test` from the `cloud/backend` directory.
 
-<details>
-<summary>You can also go to the <a href="https://github.com/openai/codex/releases/latest">latest GitHub Release</a> and download the appropriate binary for your platform.</summary>
+## Development
 
-Each GitHub Release contains many executables, but in practice, you likely want one of these:
+Codex Cloud uses pnpm workspaces alongside a Rust workspace. Common commands include:
 
-- macOS
-  - Apple Silicon/arm64: `codex-aarch64-apple-darwin.tar.gz`
-  - x86_64 (older Mac hardware): `codex-x86_64-apple-darwin.tar.gz`
-- Linux
-  - x86_64: `codex-x86_64-unknown-linux-musl.tar.gz`
-  - arm64: `codex-aarch64-unknown-linux-musl.tar.gz`
+```bash
+# Install workspace dependencies
+pnpm install
 
-Each archive contains a single entry with the platform baked into the name (e.g., `codex-x86_64-unknown-linux-musl`), so you likely want to rename it to `codex` after extracting it.
+# Build the Next.js frontend
+pnpm --filter codex-cloud-frontend build
 
-</details>
+# Format documentation and JSON metadata
+pnpm run format
 
-### Using Codex with your ChatGPT plan
+# Run backend unit tests
+cargo test -p codex-cloud-backend
+```
 
-<p align="center">
-  <img src="./.github/codex-cli-login.png" alt="Codex CLI login" width="80%" />
-  </p>
+Refer to [PNPM.md](./PNPM.md) for workspace tips and [docs/install.md](./docs/install.md) for system requirements.
 
-Run `codex` and select **Sign in with ChatGPT**. We recommend signing into your ChatGPT account to use Codex as part of your Plus, Pro, Team, Edu, or Enterprise plan. [Learn more about what's included in your ChatGPT plan](https://help.openai.com/en/articles/11369540-codex-in-chatgpt).
+## Project structure
 
-You can also use Codex with an API key, but this requires [additional setup](./docs/authentication.md#usage-based-billing-alternative-use-an-openai-api-key). If you previously used an API key for usage-based billing, see the [migration steps](./docs/authentication.md#migrating-from-usage-based-billing-api-key). If you're having trouble with login, please comment on [this issue](https://github.com/openai/codex/issues/1243).
+- `codex-cli` - JavaScript wrapper that bundles and launches the Rust CLI binary.
+- `codex-rs` - Rust workspace that implements the core agent and supporting crates.
+- `cloud` - Backend services, background workers, and the Next.js frontend.
+- `sdk/typescript` - TypeScript SDK and sample integrations.
+- `docs` - Reference documentation for configuration, automation, and deployment.
+- `scripts` - Tooling for releases, packaging, and contributor workflows.
 
-### Model Context Protocol (MCP)
+## Community and support
 
-Codex can access MCP servers. To configure them, refer to the [config docs](./docs/config.md#mcp_servers).
-
-### Configuration
-
-Codex CLI supports a rich set of configuration options, with preferences stored in `~/.codex/config.toml`. For full configuration options, see [Configuration](./docs/config.md).
-
----
-
-### Docs & FAQ
-
-- [**Getting started**](./docs/getting-started.md)
-  - [CLI usage](./docs/getting-started.md#cli-usage)
-  - [Running with a prompt as input](./docs/getting-started.md#running-with-a-prompt-as-input)
-  - [Example prompts](./docs/getting-started.md#example-prompts)
-  - [Memory with AGENTS.md](./docs/getting-started.md#memory-with-agentsmd)
-  - [Configuration](./docs/config.md)
-- [**Sandbox & approvals**](./docs/sandbox.md)
-- [**Authentication**](./docs/authentication.md)
-  - [Auth methods](./docs/authentication.md#forcing-a-specific-auth-method-advanced)
-  - [Login on a "Headless" machine](./docs/authentication.md#connecting-on-a-headless-machine)
-- **Automating Codex**
-  - [GitHub Action](https://github.com/openai/codex-action)
-  - [TypeScript SDK](./sdk/typescript/README.md)
-  - [Non-interactive mode (`codex exec`)](./docs/exec.md)
-- [**Advanced**](./docs/advanced.md)
-  - [Tracing / verbose logging](./docs/advanced.md#tracing--verbose-logging)
-  - [Model Context Protocol (MCP)](./docs/advanced.md#model-context-protocol-mcp)
-- [**Zero data retention (ZDR)**](./docs/zdr.md)
-- [**Contributing**](./docs/contributing.md)
-- [**Install & build**](./docs/install.md)
-  - [System Requirements](./docs/install.md#system-requirements)
-  - [DotSlash](./docs/install.md#dotslash)
-  - [Build from source](./docs/install.md#build-from-source)
-- [**FAQ**](./docs/faq.md)
-- [**Open source fund**](./docs/open-source-fund.md)
-
----
+Issues and pull requests are welcome. This fork tracks changes independently, so please file discussions in this repository instead of the original upstream tracker.
 
 ## License
 
-This repository is licensed under the [Apache-2.0 License](LICENSE).
+Codex Cloud - Independent Edition is released under the [Apache-2.0 License](./LICENSE).

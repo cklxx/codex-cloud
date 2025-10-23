@@ -53,7 +53,8 @@ struct ReleaseInfo {
 }
 
 const VERSION_FILENAME: &str = "version.json";
-const LATEST_RELEASE_URL: &str = "https://api.github.com/repos/openai/codex/releases/latest";
+const LATEST_RELEASE_URL: &str =
+    "https://api.github.com/repos/cklxx/codex-cloud/releases/latest";
 
 fn version_filepath(config: &Config) -> PathBuf {
     config.codex_home.join(VERSION_FILENAME)

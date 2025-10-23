@@ -324,7 +324,7 @@ async fn run_ratatui_app(
             Line::from("See full release notes:"),
             Line::from(""),
             Line::from(
-                "https://github.com/openai/codex/releases/latest"
+                "https://github.com/cklxx/codex-cloud/releases/latest"
                     .cyan()
                     .underlined(),
             ),
@@ -332,14 +332,14 @@ async fn run_ratatui_app(
         ];
 
         if managed_by_bun {
-            let bun_cmd = "bun install -g @openai/codex@latest";
+            let bun_cmd = "bun install -g codex-cloud-cli@latest";
             content_lines.push(Line::from(vec![
                 "Run ".into(),
                 bun_cmd.cyan(),
                 " to update.".into(),
             ]));
         } else if managed_by_npm {
-            let npm_cmd = "npm install -g @openai/codex@latest";
+            let npm_cmd = "npm install -g codex-cloud-cli@latest";
             content_lines.push(Line::from(vec![
                 "Run ".into(),
                 npm_cmd.cyan(),
@@ -348,7 +348,7 @@ async fn run_ratatui_app(
         } else if cfg!(target_os = "macos")
             && (exe.starts_with("/opt/homebrew") || exe.starts_with("/usr/local"))
         {
-            let brew_cmd = "brew upgrade codex";
+            let brew_cmd = "brew upgrade codex-cloud";
             content_lines.push(Line::from(vec![
                 "Run ".into(),
                 brew_cmd.cyan(),
@@ -357,7 +357,9 @@ async fn run_ratatui_app(
         } else {
             content_lines.push(Line::from(vec![
                 "See ".into(),
-                "https://github.com/openai/codex".cyan().underlined(),
+                "https://github.com/cklxx/codex-cloud"
+                    .cyan()
+                    .underlined(),
                 " for installation options.".into(),
             ]));
         }

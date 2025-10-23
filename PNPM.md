@@ -33,11 +33,11 @@ corepack prepare pnpm@10.8.1 --activate
 
 ### Workspace-specific commands
 
-| Action                                     | Command                                  |
-| ------------------------------------------ | ---------------------------------------- |
-| Run a command in a specific package        | `pnpm --filter @openai/codex run build`  |
-| Install a dependency in a specific package | `pnpm --filter @openai/codex add lodash` |
-| Run a command in all packages              | `pnpm -r run test`                       |
+| Action                                     | Command                                    |
+| ------------------------------------------ | ------------------------------------------ |
+| Run a command in a specific package        | `pnpm --filter codex-cloud-cli run build`  |
+| Install a dependency in a specific package | `pnpm --filter codex-cloud-cli add lodash` |
+| Run a command in all packages              | `pnpm -r run test`                         |
 
 ## Monorepo structure
 
@@ -46,7 +46,7 @@ codex/
 ├── pnpm-workspace.yaml    # Workspace configuration
 ├── .npmrc                 # pnpm configuration
 ├── package.json           # Root dependencies and scripts
-├── codex-cli/             # Main package
+├── codex-cli/             # codex-cloud-cli package
 │   └── package.json       # codex-cli specific dependencies
 └── docs/                  # Documentation (future package)
 ```

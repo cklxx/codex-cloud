@@ -66,28 +66,99 @@ def collect_native_components(packages: list[str]) -> set[str]:
     return components
 
 
-def resolve_release_workflow(version: str) -> dict:
-    stdout = subprocess.check_output(
+def _gh_json(args: list[str]) -> object:
+    try:
+        stdout = subprocess.check_output(args, cwd=REPO_ROOT, text=True)
+    except subprocess.CalledProcessError:
+        return None
+    stdout = stdout.strip()
+    if not stdout:
+        return None
+    try:
+        return json.loads(stdout)
+    except json.JSONDecodeError:
+        return None
+
+
+def _candidate_release_refs(version: str) -> list[tuple[str, str]]:
+    refs: list[tuple[str, str]] = []
+
+    release_info = _gh_json(
         [
             "gh",
-            "run",
-            "list",
-            "--branch",
-            f"rust-v{version}",
+            "release",
+            "view",
+            version,
             "--json",
-            "workflowName,url,headSha",
-            "--workflow",
-            WORKFLOW_NAME,
-            "--jq",
-            "first(.[])",
-        ],
-        cwd=REPO_ROOT,
-        text=True,
+            "tagName,targetCommitish",
+            "--repo",
+            GITHUB_REPO,
+        ]
     )
-    workflow = json.loads(stdout or "null")
-    if not workflow:
-        raise RuntimeError(f"Unable to find rust-release workflow for version {version}.")
-    return workflow
+
+    if isinstance(release_info, dict):
+        tag_name = release_info.get("tagName")
+        if isinstance(tag_name, str) and tag_name:
+            refs.append(("tag", tag_name))
+
+        target_branch = release_info.get("targetCommitish")
+        if isinstance(target_branch, str) and target_branch:
+            refs.append(("branch", target_branch))
+
+    # Fallbacks for legacy naming conventions
+    refs.extend(
+        [
+            ("tag", f"rust-v{version}"),
+            ("branch", f"rust-v{version}"),
+            ("tag", version),
+            ("branch", version),
+        ]
+    )
+
+    # Deduplicate while preserving order
+    seen: set[tuple[str, str]] = set()
+    unique_refs: list[tuple[str, str]] = []
+    for ref in refs:
+        if ref in seen:
+            continue
+        seen.add(ref)
+        unique_refs.append(ref)
+    return unique_refs
+
+
+def _resolve_workflow_from_ref(ref_type: str, ref: str) -> dict | None:
+    base_cmd = [
+        "gh",
+        "run",
+        "list",
+        "--json",
+        "workflowName,url,headSha",
+        "--workflow",
+        WORKFLOW_NAME,
+        "--repo",
+        GITHUB_REPO,
+        "--jq",
+        "first(.[])",
+    ]
+    if ref_type == "tag":
+        base_cmd.extend(["--tag", ref])
+    elif ref_type == "branch":
+        base_cmd.extend(["--branch", ref])
+    else:
+        return None
+
+    workflow = _gh_json(base_cmd)
+    if isinstance(workflow, dict) and workflow.get("url"):
+        return workflow
+    return None
+
+
+def resolve_release_workflow(version: str) -> dict:
+    for ref_type, ref in _candidate_release_refs(version):
+        workflow = _resolve_workflow_from_ref(ref_type, ref)
+        if workflow:
+            return workflow
+    raise RuntimeError(f"Unable to find rust-release workflow for version {version}.")
 
 
 def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str | None]:

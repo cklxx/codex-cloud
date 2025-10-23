@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -16,7 +17,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_SCRIPT = REPO_ROOT / "codex-cli" / "scripts" / "build_npm_package.py"
 INSTALL_NATIVE_DEPS = REPO_ROOT / "codex-cli" / "scripts" / "install_native_deps.py"
-GITHUB_REPO = "openai/codex"
+WORKFLOW_NAME = ".github/workflows/rust-release.yml"
 
 WORKFLOW_SEARCH_ORDER: tuple[tuple[str, tuple[str | None, ...]], ...] = (
     (
@@ -62,7 +63,9 @@ if _INSTALL_SPEC is None or _INSTALL_SPEC.loader is None:
     raise RuntimeError(f"Unable to load module from {INSTALL_NATIVE_DEPS}")
 _INSTALL_MODULE = importlib.util.module_from_spec(_INSTALL_SPEC)
 _INSTALL_SPEC.loader.exec_module(_INSTALL_MODULE)
-DEFAULT_WORKFLOW_URL = getattr(_INSTALL_MODULE, "DEFAULT_WORKFLOW_URL", "")
+DEFAULT_NATIVE_WORKFLOW_URL = getattr(
+    _INSTALL_MODULE, "DEFAULT_WORKFLOW_URL", ""
+).strip()
 
 
 def parse_args() -> argparse.Namespace:
@@ -104,43 +107,116 @@ def collect_native_components(packages: list[str]) -> set[str]:
     return components
 
 
-def _workflow_run_for(
-    workflow_name: str,
-    branch: str | None,
-    version: str,
-) -> dict | None:
-    cmd = [
-        "gh",
-        "run",
-        "list",
-        "--repo",
-        GITHUB_REPO,
-        "--workflow",
-        workflow_name,
-        "--json",
-        "workflowName,url,headSha",
-        "--jq",
-        "first(.[])",
+def _normalize_ref(ref: str) -> str:
+    ref = ref.strip()
+    for prefix in ("refs/heads/", "refs/tags/"):
+        if ref.startswith(prefix):
+            return ref[len(prefix) :]
+    return ref
+
+
+def _candidate_branches(version: str) -> list[str]:
+    version = version.strip()
+    if not version:
+        return []
+
+    semver_like = bool(re.match(r"^v?\d+\.\d+\.\d+.*$", version))
+    base_versions = [version]
+    if semver_like and not version.startswith("v"):
+        base_versions.append(f"v{version}")
+
+    prefixes = [
+        None,
+        "release",
+        "rust",
+        "rust-release",
+        "rust-nse",
+        "first-release",
     ]
-    if branch:
-        cmd.extend(["--branch", branch.format(version=version)])
+
+    candidates: list[str] = []
+    for base in base_versions:
+        candidates.append(base)
+        candidates.append(base.replace("-", "/"))
+        if base.startswith("rust-"):
+            continue
+        candidates.append(f"rust-v{base}")
+        candidates.append(f"rust/{base}")
+        for prefix in prefixes:
+            if not prefix:
+                continue
+            for separator in ("-", "/"):
+                candidates.append(f"{prefix}{separator}{base}")
+
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for candidate in candidates:
+        candidate = candidate.strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        deduped.append(candidate)
+    return deduped
+
+
+def _find_workflow_run(version: str, workflow_name: str) -> dict | None:
     try:
-        stdout = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)
+        stdout = subprocess.check_output(
+            [
+                "gh",
+                "run",
+                "list",
+                "--workflow",
+                workflow_name,
+                "--json",
+                "databaseId,headBranch,headSha,displayTitle,url",
+                "--limit",
+                "200",
+            ],
+            cwd=REPO_ROOT,
+            text=True,
+        )
     except subprocess.CalledProcessError:
         return None
-    workflow = json.loads(stdout or "null")
+    runs = json.loads(stdout or "[]")
+    if not runs:
+        return None
+
+    candidates = _candidate_branches(version)
+    for candidate in candidates:
+        candidate_norm = _normalize_ref(candidate)
+        for run in runs:
+            branch = _normalize_ref(run.get("headBranch", ""))
+            if not branch:
+                continue
+            if branch == candidate_norm or branch.endswith(f"/{candidate_norm}"):
+                return run
+
+    lower_version = version.lower()
+    for run in runs:
+        branch = _normalize_ref(run.get("headBranch", "")).lower()
+        title = (run.get("displayTitle") or "").lower()
+        if lower_version and (lower_version in branch or lower_version in title):
+            return run
+
+    return None
+
+
+def resolve_release_workflow(version: str) -> dict:
+    workflow = _find_workflow_run(version, WORKFLOW_NAME)
     if workflow:
         return workflow
-    return None
 
+    for workflow_name in ADDITIONAL_WORKFLOWS:
+        workflow = _find_workflow_run(version, workflow_name)
+        if workflow:
+            return workflow
 
-def resolve_release_workflow(version: str) -> dict | None:
-    for workflow_name, branch_templates in WORKFLOW_SEARCH_ORDER:
-        for branch_template in branch_templates:
-            workflow = _workflow_run_for(workflow_name, branch_template, version)
-            if workflow:
-                return workflow
-    return None
+    tried = [WORKFLOW_NAME, *ADDITIONAL_WORKFLOWS]
+    raise RuntimeError(
+        "Unable to find release workflow run for version "
+        f"{version}. Tried workflows: {', '.join(tried)}."
+    )
 
 
 def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str | None]:
@@ -151,17 +227,18 @@ def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str |
     if workflow:
         return workflow["url"], workflow.get("headSha")
 
-    if DEFAULT_WORKFLOW_URL:
-        print(
-            "Warning: Falling back to default workflow for native artifacts; "
-            "consider supplying --workflow-url explicitly."
+    fallback = os.environ.get("CODEX_DEFAULT_WORKFLOW_URL", DEFAULT_NATIVE_WORKFLOW_URL)
+    if not fallback:
+        raise RuntimeError(
+            "Unable to find a release workflow run and no fallback workflow "
+            "URL is configured."
         )
-        return DEFAULT_WORKFLOW_URL, None
 
-    raise RuntimeError(
-        "Unable to resolve a release workflow for version "
-        f"{version}. Specify --workflow-url to override."
+    print(
+        "Falling back to default workflow artifacts at "
+        f"{fallback}."
     )
+    return fallback, None
 
 
 def install_native_components(

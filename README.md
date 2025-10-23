@@ -54,7 +54,6 @@ The repository now includes the first runnable building blocks for the single-ma
 
 Automated coverage for the happy-path workflow lives in `cloud/backend/tests/task_flow.rs`; run it locally with `cargo test` from the `cloud/backend` directory. The frontend builds with `pnpm --filter codex-cloud-frontend build`.
 
-
 <details>
 <summary>You can also go to the <a href="https://github.com/openai/codex/releases/latest">latest GitHub Release</a> and download the appropriate binary for your platform.</summary>
 

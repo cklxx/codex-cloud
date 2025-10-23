@@ -27,10 +27,10 @@ impl ArtifactStore {
     pub async fn store_text(&self, content: &str, suffix: &str) -> Result<String, AppError> {
         let artifact_id = format!("{}.{}", Uuid::new_v4(), suffix);
         let path = self.path(&artifact_id);
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent).await?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent).await?;
         }
         fs::write(&path, content).await?;
         Ok(artifact_id)

@@ -1,0 +1,16 @@
+[Unit]
+Description=Codex Ignite Supervisor
+Requires=codex-compose.service firecracker.service
+After=codex-compose.service firecracker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/codex/ignite-supervisor.env
+ExecStart=/usr/local/bin/ignite supervisor --config /etc/codex/ignite-supervisor.toml
+Restart=on-failure
+RestartSec=10s
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -12,6 +12,7 @@ BRANCH=${BRANCH:-main}
 ENV_ID=${ENV_ID:-local-dev}
 PROMPT=${PROMPT:-"Verify Codex CLI compatibility"}
 ATTEMPTS=${ATTEMPTS:-1}
+ARTIFACT_DIR=${ARTIFACT_DIR:-}
 
 if ! command -v cargo >/dev/null 2>&1; then
   echo "cargo is required to run the CLI contract test" >&2
@@ -44,6 +45,7 @@ JSON
 import json, sys
 print(json.load(sys.stdin)["id"])
 PY
+    )
     log "Repository created with id $REPO_ID"
     echo "$REPO_ID"
     return
@@ -154,9 +156,54 @@ cat >"$AUTH_JSON" <<JSON
 }
 JSON
 
+LOG_FILE="$TMP_DIR/codex-cli.log"
+CONTEXT_JSON="$TMP_DIR/context.json"
+TASKS_JSON="$TMP_DIR/tasks.json"
+
 log "Running codex cloud exec"
 pushd "$CARGO_ROOT" >/dev/null
+set +e
 CODEX_HOME="$TMP_DIR" \
 CODEX_CLOUD_TASKS_BASE_URL="$CODEX_BASE" \
-cargo run -p codex-cli --quiet -- cloud exec --env "$ENV_ID" --attempts "$ATTEMPTS" "$PROMPT"
+cargo run -p codex-cli --quiet -- cloud exec --env "$ENV_ID" --attempts "$ATTEMPTS" "$PROMPT" \
+  2>&1 | tee "$LOG_FILE"
+CLI_STATUS=${PIPESTATUS[0]}
+set -e
 popd >/dev/null
+
+if request GET "$API_BASE/tasks" -H "$AUTH" >"$TASKS_JSON" 2>/dev/null; then
+  log "Captured task snapshot"
+else
+  log "Unable to capture task snapshot"
+  rm -f "$TASKS_JSON"
+fi
+
+cat >"$CONTEXT_JSON" <<JSON
+{
+  "timestamp": "$TIMESTAMP",
+  "api_base": "$API_BASE",
+  "codex_base": "$CODEX_BASE",
+  "email": "$EMAIL",
+  "repository": {
+    "id": "$REPO_ID",
+    "name": "$REPOSITORY_NAME",
+    "git_url": "$GIT_URL",
+    "branch": "$BRANCH"
+  },
+  "environment_id": "$ENV_ID",
+  "prompt": "$PROMPT",
+  "attempts": "$ATTEMPTS"
+}
+JSON
+
+if [[ -n "$ARTIFACT_DIR" ]]; then
+  mkdir -p "$ARTIFACT_DIR"
+  cp "$AUTH_JSON" "$ARTIFACT_DIR/auth.json"
+  cp "$LOG_FILE" "$ARTIFACT_DIR/cli-output.log"
+  cp "$CONTEXT_JSON" "$ARTIFACT_DIR/context.json"
+  if [[ -f "$TASKS_JSON" ]]; then
+    cp "$TASKS_JSON" "$ARTIFACT_DIR/tasks.json"
+  fi
+fi
+
+exit "$CLI_STATUS"

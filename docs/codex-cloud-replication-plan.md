@@ -18,13 +18,13 @@
 
 根据 CLI 暴露的 API 行为与交互流程，可将 Codex Cloud 能力拆分为以下核心域：
 
-| 域 | 关键功能 | 核心接口 / 参考 | 自建要点 |
-| --- | --- | --- | --- |
-| 身份与工作区 | ChatGPT 登录态、ChatGPT-Account-Id 头 | `codex_cloud_tasks::init_backend` 中对会话与账户标识的加载流程 | 用企业 IdP + OIDC/OAuth2 替换，发放短期访问令牌与工作区上下文 |
-| 任务目录 | 列表、筛选、排序、详情 | `CloudBackend::list_tasks`、`get_task_text`、`get_task_diff` 等接口 | 提供分页 API、状态机维护、支持审查视图 |
-| 任务执行 | 尝试、最佳结果、预检 | `apply_task_preflight`、`apply_task`、`list_sibling_attempts` 等接口 | 引入作业编排器与沙箱执行器，支持多次尝试与评分 |
-| 任务创建 | `codex cloud exec` 触发 | `CloudBackend::create_task`、环境选择与 label 解析 | 提供 API / Web 表单创建任务、预置环境标签与权限控制 |
-| 工件与补丁 | Diff、文本片段、附件 | `get_task_diff`、`get_task_text` 等调用 | 统一存储补丁、日志、附件，支持渲染与下载 |
+| 域           | 关键功能                              | 核心接口 / 参考                                                      | 自建要点                                                      |
+| ------------ | ------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 身份与工作区 | ChatGPT 登录态、ChatGPT-Account-Id 头 | `codex_cloud_tasks::init_backend` 中对会话与账户标识的加载流程       | 用企业 IdP + OIDC/OAuth2 替换，发放短期访问令牌与工作区上下文 |
+| 任务目录     | 列表、筛选、排序、详情                | `CloudBackend::list_tasks`、`get_task_text`、`get_task_diff` 等接口  | 提供分页 API、状态机维护、支持审查视图                        |
+| 任务执行     | 尝试、最佳结果、预检                  | `apply_task_preflight`、`apply_task`、`list_sibling_attempts` 等接口 | 引入作业编排器与沙箱执行器，支持多次尝试与评分                |
+| 任务创建     | `codex cloud exec` 触发               | `CloudBackend::create_task`、环境选择与 label 解析                   | 提供 API / Web 表单创建任务、预置环境标签与权限控制           |
+| 工件与补丁   | Diff、文本片段、附件                  | `get_task_diff`、`get_task_text` 等调用                              | 统一存储补丁、日志、附件，支持渲染与下载                      |
 
 ## 3. 总体架构
 
@@ -88,15 +88,15 @@
 
 ## 6. 接口设计（REST/GraphQL 草案）
 
-| 功能 | 方法与路径 | 请求示例 | 响应要点 |
-| --- | --- | --- | --- |
-| 列表任务 | `GET /v1/tasks?status=ready&workspace=foo` | 支持分页、模糊搜索 | 返回 summaries，与 CLI 期待结构对齐 (`TaskSummary`) |
-| 获取详情 | `GET /v1/tasks/{id}` | | 包含描述、diff、附件链接、最近尝试 |
-| 创建任务 | `POST /v1/tasks` | prompt、workspace、best_of_n | 返回 `task_id` 与初始 attempt |
-| 提交尝试 | `POST /v1/tasks/{id}/attempts` | 环境、模型参数 | 触发 Execution Service | 
-| 领取任务 | `POST /v1/tasks/{id}:claim` | | 设置执行人与过期时间 |
-| 审批结果 | `POST /v1/tasks/{id}:approve` | comment、decision | 推进状态机 |
-| Webhook | `POST /v1/hooks` | 注册回调 URL | 供外部系统订阅任务事件 |
+| 功能     | 方法与路径                                 | 请求示例                     | 响应要点                                            |
+| -------- | ------------------------------------------ | ---------------------------- | --------------------------------------------------- |
+| 列表任务 | `GET /v1/tasks?status=ready&workspace=foo` | 支持分页、模糊搜索           | 返回 summaries，与 CLI 期待结构对齐 (`TaskSummary`) |
+| 获取详情 | `GET /v1/tasks/{id}`                       |                              | 包含描述、diff、附件链接、最近尝试                  |
+| 创建任务 | `POST /v1/tasks`                           | prompt、workspace、best_of_n | 返回 `task_id` 与初始 attempt                       |
+| 提交尝试 | `POST /v1/tasks/{id}/attempts`             | 环境、模型参数               | 触发 Execution Service                              |
+| 领取任务 | `POST /v1/tasks/{id}:claim`                |                              | 设置执行人与过期时间                                |
+| 审批结果 | `POST /v1/tasks/{id}:approve`              | comment、decision            | 推进状态机                                          |
+| Webhook  | `POST /v1/hooks`                           | 注册回调 URL                 | 供外部系统订阅任务事件                              |
 
 ## 7. 实施阶段
 
@@ -129,12 +129,12 @@
 
 ## 9. 风险与缓解
 
-| 风险 | 描述 | 缓解措施 |
-| --- | --- | --- |
-| 模型成本不可控 | 多次尝试会增加调用量 | 引入配额、成本仪表板、自动降级模型 |
-| 沙箱逃逸 | 执行用户代码存在安全隐患 | 使用多重隔离 (VM + 网络策略)、持续安全审计 |
-| 数据一致性 | 异步任务状态不同步 | 使用事件溯源 / outbox 模式，定期对账 |
-| 用户体验差 | Web 端未复刻 CLI 的交互体验 | 复用 CLI 的交互流程、用户测试迭代 |
+| 风险           | 描述                        | 缓解措施                                   |
+| -------------- | --------------------------- | ------------------------------------------ |
+| 模型成本不可控 | 多次尝试会增加调用量        | 引入配额、成本仪表板、自动降级模型         |
+| 沙箱逃逸       | 执行用户代码存在安全隐患    | 使用多重隔离 (VM + 网络策略)、持续安全审计 |
+| 数据一致性     | 异步任务状态不同步          | 使用事件溯源 / outbox 模式，定期对账       |
+| 用户体验差     | Web 端未复刻 CLI 的交互体验 | 复用 CLI 的交互流程、用户测试迭代          |
 
 ## 10. 交付物清单
 
@@ -149,6 +149,5 @@
 - 依据本方案产出更详细的系统设计 (LLD) 与序列图。
 - 选择并集成具体的模型服务，实现计划/执行模块。
 - 规划安全评估与渗透测试，确保上线前通过合规审查。
-
 
 [^firecracker-plan]: Firecracker "Performance" 文档指出通过 snapshot 恢复 microVM 的启动时延约 125 ms，详见 <https://github.com/firecracker-microvm/firecracker/blob/main/docs/performance.md>。

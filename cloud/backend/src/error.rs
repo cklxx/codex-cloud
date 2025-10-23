@@ -26,6 +26,8 @@ pub enum AppError {
     Token(#[from] jsonwebtoken::errors::Error),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+    #[error("http error: {0}")]
+    Http(#[from] reqwest::Error),
 }
 
 impl AppError {
@@ -53,7 +55,7 @@ impl AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, message) = match &self {
-            Self::Database(_) | Self::Hash(_) | Self::Io(_) => (
+            Self::Database(_) | Self::Hash(_) | Self::Io(_) | Self::Http(_) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal server error".to_string(),
             ),

@@ -31,6 +31,17 @@ _BUILD_MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_BUILD_MODULE)
 PACKAGE_NATIVE_COMPONENTS = getattr(_BUILD_MODULE, "PACKAGE_NATIVE_COMPONENTS", {})
 
+_INSTALL_SPEC = importlib.util.spec_from_file_location(
+    "codex_install_native_deps", INSTALL_NATIVE_DEPS
+)
+if _INSTALL_SPEC is None or _INSTALL_SPEC.loader is None:
+    raise RuntimeError(f"Unable to load module from {INSTALL_NATIVE_DEPS}")
+_INSTALL_MODULE = importlib.util.module_from_spec(_INSTALL_SPEC)
+_INSTALL_SPEC.loader.exec_module(_INSTALL_MODULE)
+DEFAULT_NATIVE_WORKFLOW_URL = getattr(
+    _INSTALL_MODULE, "DEFAULT_WORKFLOW_URL", ""
+).strip()
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -188,7 +199,21 @@ def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str |
         return override, None
 
     workflow = resolve_release_workflow(version)
-    return workflow["url"], workflow.get("headSha")
+    if workflow:
+        return workflow["url"], workflow.get("headSha")
+
+    fallback = os.environ.get("CODEX_DEFAULT_WORKFLOW_URL", DEFAULT_NATIVE_WORKFLOW_URL)
+    if not fallback:
+        raise RuntimeError(
+            "Unable to find a release workflow run and no fallback workflow "
+            "URL is configured."
+        )
+
+    print(
+        "Falling back to default workflow artifacts at "
+        f"{fallback}."
+    )
+    return fallback, None
 
 
 def install_native_components(

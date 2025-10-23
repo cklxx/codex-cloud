@@ -26,6 +26,17 @@ _BUILD_MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_BUILD_MODULE)
 PACKAGE_NATIVE_COMPONENTS = getattr(_BUILD_MODULE, "PACKAGE_NATIVE_COMPONENTS", {})
 
+_INSTALL_SPEC = importlib.util.spec_from_file_location(
+    "codex_install_native_deps", INSTALL_NATIVE_DEPS
+)
+if _INSTALL_SPEC is None or _INSTALL_SPEC.loader is None:
+    raise RuntimeError(f"Unable to load module from {INSTALL_NATIVE_DEPS}")
+_INSTALL_MODULE = importlib.util.module_from_spec(_INSTALL_SPEC)
+_INSTALL_SPEC.loader.exec_module(_INSTALL_MODULE)
+DEFAULT_NATIVE_WORKFLOW_URL = getattr(
+    _INSTALL_MODULE, "DEFAULT_WORKFLOW_URL", ""
+).strip()
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -66,28 +77,86 @@ def collect_native_components(packages: list[str]) -> set[str]:
     return components
 
 
-def resolve_release_workflow(version: str) -> dict:
-    stdout = subprocess.check_output(
-        [
-            "gh",
-            "run",
-            "list",
-            "--branch",
-            f"rust-v{version}",
-            "--json",
-            "workflowName,url,headSha",
-            "--workflow",
-            WORKFLOW_NAME,
-            "--jq",
-            "first(.[])",
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-    )
-    workflow = json.loads(stdout or "null")
-    if not workflow:
-        raise RuntimeError(f"Unable to find rust-release workflow for version {version}.")
-    return workflow
+def _candidate_release_branches(version: str) -> list[str]:
+    """Generate branch names we should probe for release workflows.
+
+    Historically, releases used the ``rust-v<version>`` naming scheme, but
+    some older automation referenced other prefixes (e.g. ``first`` or
+    ``rust-nse``). We attempt a handful of common patterns while keeping the
+    original version string intact so that prerelease identifiers continue to
+    work.
+    """
+
+    candidates: list[str] = []
+    bare_version = version
+
+    # Allow callers to pass channel@version (e.g. "rust-nse@0.1.0") or
+    # channel:version. In those cases we treat the portion after the separator
+    # as the semantic version that should be appended to known branch prefixes.
+    for separator in ("@", ":"):
+        if separator in version:
+            channel, bare_version = version.split(separator, 1)
+            candidates.append(f"{channel}-v{bare_version}")
+            candidates.append(f"{channel}/v{bare_version}")
+            candidates.append(f"{channel}-{bare_version}")
+            break
+
+    # Default branch naming conventions.
+    candidates.append(f"rust-v{bare_version}")
+    candidates.append(f"first-v{bare_version}")
+    candidates.append(f"rust-nse-v{bare_version}")
+
+    # Finally, include the raw version in case the branch already includes the
+    # "v" prefix or uses an alternate naming scheme.
+    candidates.append(bare_version)
+
+    # Remove duplicates while preserving order.
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for branch in candidates:
+        if branch and branch not in seen:
+            deduped.append(branch)
+            seen.add(branch)
+    return deduped
+
+
+def resolve_release_workflow(version: str) -> dict | None:
+    errors: list[str] = []
+    for branch in _candidate_release_branches(version):
+        try:
+            stdout = subprocess.check_output(
+                [
+                    "gh",
+                    "run",
+                    "list",
+                    "--branch",
+                    branch,
+                    "--json",
+                    "workflowName,url,headSha",
+                    "--workflow",
+                    WORKFLOW_NAME,
+                    "--jq",
+                    "first(.[])",
+                ],
+                cwd=REPO_ROOT,
+                text=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            errors.append(f"{branch}: {exc.stderr or exc}")
+            continue
+
+        workflow = json.loads(stdout or "null")
+        if workflow:
+            return workflow
+        errors.append(f"{branch}: no workflow runs found")
+
+    if errors:
+        joined = "; ".join(errors)
+        print(
+            "Warning: unable to locate release workflow run for version "
+            f"{version}. Attempted branches: {joined}"
+        )
+    return None
 
 
 def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str | None]:
@@ -95,7 +164,21 @@ def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str |
         return override, None
 
     workflow = resolve_release_workflow(version)
-    return workflow["url"], workflow.get("headSha")
+    if workflow:
+        return workflow["url"], workflow.get("headSha")
+
+    fallback = os.environ.get("CODEX_DEFAULT_WORKFLOW_URL", DEFAULT_NATIVE_WORKFLOW_URL)
+    if not fallback:
+        raise RuntimeError(
+            "Unable to find a release workflow run and no fallback workflow "
+            "URL is configured."
+        )
+
+    print(
+        "Falling back to default workflow artifacts at "
+        f"{fallback}."
+    )
+    return fallback, None
 
 
 def install_native_components(

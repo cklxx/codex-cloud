@@ -357,9 +357,7 @@ async fn run_ratatui_app(
         } else {
             content_lines.push(Line::from(vec![
                 "See ".into(),
-                "https://github.com/cklxx/codex-cloud"
-                    .cyan()
-                    .underlined(),
+                "https://github.com/cklxx/codex-cloud".cyan().underlined(),
                 " for installation options.".into(),
             ]));
         }

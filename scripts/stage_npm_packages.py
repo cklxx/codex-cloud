@@ -49,6 +49,14 @@ WORKFLOW_SEARCH_ORDER: tuple[tuple[str, tuple[str | None, ...]], ...] = (
     ),
 )
 
+# Keep compatibility with older callers that expected `ADDITIONAL_WORKFLOWS` to be
+# available alongside `WORKFLOW_NAME`.
+ADDITIONAL_WORKFLOWS: tuple[str, ...] = tuple(
+    workflow_name
+    for workflow_name, _patterns in WORKFLOW_SEARCH_ORDER
+    if workflow_name != WORKFLOW_NAME
+)
+
 _SPEC = importlib.util.spec_from_file_location("codex_build_npm_package", BUILD_SCRIPT)
 if _SPEC is None or _SPEC.loader is None:
     raise RuntimeError(f"Unable to load module from {BUILD_SCRIPT}")

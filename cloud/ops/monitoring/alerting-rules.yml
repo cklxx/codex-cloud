@@ -1,0 +1,27 @@
+groups:
+  - name: codex-availability
+    rules:
+      - alert: CodexApiDown
+        expr: up{job="codex-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Codex API is unavailable"
+          description: "Prometheus failed to scrape the Codex API metrics endpoint for more than a minute."
+      - alert: FirecrackerSupervisorsDown
+        expr: up{job="firecracker"} == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Firecracker supervisor metrics are unavailable"
+          description: "Prometheus has not received Ignite supervisor metrics for 5 minutes."
+      - alert: HostExporterMissing
+        expr: up{job="host-exporters"} < 2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A host exporter is not reporting"
+          description: "One or more host-level exporters have stopped sending metrics."

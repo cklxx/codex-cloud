@@ -49,6 +49,7 @@ yarn-error.log*
 cloud/frontend/playwright-report/
 cloud/frontend/test-results/
 cloud/frontend/.playwright/
+sdk/typescript/v8-compile-cache-*/
 
 # env
 .env*

@@ -18,14 +18,14 @@ export const options = {
       timeUnit: "1s",
       duration,
       preAllocatedVUs: vus,
-      maxVUs
-    }
+      maxVUs,
+    },
   },
   thresholds: {
     http_req_duration: ["p(95)<1500"],
     tasks_list_duration: ["avg<750", "p(95)<1200"],
-    environments_duration: ["avg<750", "p(95)<1200"]
-  }
+    environments_duration: ["avg<750", "p(95)<1200"],
+  },
 };
 
 const tasksListTrend = new Trend("tasks_list_duration");
@@ -37,25 +37,25 @@ function withAuth(headers = {}) {
   }
   return {
     ...headers,
-    Authorization: `Bearer ${token}`
+    Authorization: `Bearer ${token}`,
   };
 }
 
 export default function () {
   const listResponse = http.get(`${apiBase}/tasks`, {
-    headers: withAuth({ "Content-Type": "application/json" })
+    headers: withAuth({ "Content-Type": "application/json" }),
   });
   tasksListTrend.add(listResponse.timings.duration);
   check(listResponse, {
-    "tasks list succeeded": (resp) => resp.status === 200
+    "tasks list succeeded": (resp) => resp.status === 200,
   });
 
   const envResponse = http.get(`${apiBase}/api/codex/environments`, {
-    headers: withAuth({ "Content-Type": "application/json" })
+    headers: withAuth({ "Content-Type": "application/json" }),
   });
   environmentsTrend.add(envResponse.timings.duration);
   check(envResponse, {
-    "environments succeeded": (resp) => resp.status === 200
+    "environments succeeded": (resp) => resp.status === 200,
   });
 
   sleep(pause);

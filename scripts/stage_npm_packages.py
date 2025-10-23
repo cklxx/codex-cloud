@@ -16,8 +16,37 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_SCRIPT = REPO_ROOT / "codex-cli" / "scripts" / "build_npm_package.py"
 INSTALL_NATIVE_DEPS = REPO_ROOT / "codex-cli" / "scripts" / "install_native_deps.py"
-WORKFLOW_NAME = ".github/workflows/rust-release.yml"
 GITHUB_REPO = "openai/codex"
+
+WORKFLOW_SEARCH_ORDER: tuple[tuple[str, tuple[str | None, ...]], ...] = (
+    (
+        ".github/workflows/rust-release.yml",
+        (
+            "rust-v{version}",
+            "rust-release-v{version}",
+            "rust-release/{version}",
+            "release/v{version}",
+            None,
+        ),
+    ),
+    (
+        ".github/workflows/rust-nse.yml",
+        (
+            "rust-nse-v{version}",
+            "rust-nse/{version}",
+            "nse-v{version}",
+            None,
+        ),
+    ),
+    (
+        ".github/workflows/first-release.yml",
+        (
+            "first-release-v{version}",
+            "first-release/{version}",
+            None,
+        ),
+    ),
+)
 
 _SPEC = importlib.util.spec_from_file_location("codex_build_npm_package", BUILD_SCRIPT)
 if _SPEC is None or _SPEC.loader is None:
@@ -25,6 +54,15 @@ if _SPEC is None or _SPEC.loader is None:
 _BUILD_MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_BUILD_MODULE)
 PACKAGE_NATIVE_COMPONENTS = getattr(_BUILD_MODULE, "PACKAGE_NATIVE_COMPONENTS", {})
+
+_INSTALL_SPEC = importlib.util.spec_from_file_location(
+    "codex_install_native_deps", INSTALL_NATIVE_DEPS
+)
+if _INSTALL_SPEC is None or _INSTALL_SPEC.loader is None:
+    raise RuntimeError(f"Unable to load module from {INSTALL_NATIVE_DEPS}")
+_INSTALL_MODULE = importlib.util.module_from_spec(_INSTALL_SPEC)
+_INSTALL_SPEC.loader.exec_module(_INSTALL_MODULE)
+DEFAULT_WORKFLOW_URL = getattr(_INSTALL_MODULE, "DEFAULT_WORKFLOW_URL", "")
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,28 +104,43 @@ def collect_native_components(packages: list[str]) -> set[str]:
     return components
 
 
-def resolve_release_workflow(version: str) -> dict:
-    stdout = subprocess.check_output(
-        [
-            "gh",
-            "run",
-            "list",
-            "--branch",
-            f"rust-v{version}",
-            "--json",
-            "workflowName,url,headSha",
-            "--workflow",
-            WORKFLOW_NAME,
-            "--jq",
-            "first(.[])",
-        ],
-        cwd=REPO_ROOT,
-        text=True,
-    )
+def _workflow_run_for(
+    workflow_name: str,
+    branch: str | None,
+    version: str,
+) -> dict | None:
+    cmd = [
+        "gh",
+        "run",
+        "list",
+        "--repo",
+        GITHUB_REPO,
+        "--workflow",
+        workflow_name,
+        "--json",
+        "workflowName,url,headSha",
+        "--jq",
+        "first(.[])",
+    ]
+    if branch:
+        cmd.extend(["--branch", branch.format(version=version)])
+    try:
+        stdout = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)
+    except subprocess.CalledProcessError:
+        return None
     workflow = json.loads(stdout or "null")
-    if not workflow:
-        raise RuntimeError(f"Unable to find rust-release workflow for version {version}.")
-    return workflow
+    if workflow:
+        return workflow
+    return None
+
+
+def resolve_release_workflow(version: str) -> dict | None:
+    for workflow_name, branch_templates in WORKFLOW_SEARCH_ORDER:
+        for branch_template in branch_templates:
+            workflow = _workflow_run_for(workflow_name, branch_template, version)
+            if workflow:
+                return workflow
+    return None
 
 
 def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str | None]:
@@ -95,7 +148,20 @@ def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str |
         return override, None
 
     workflow = resolve_release_workflow(version)
-    return workflow["url"], workflow.get("headSha")
+    if workflow:
+        return workflow["url"], workflow.get("headSha")
+
+    if DEFAULT_WORKFLOW_URL:
+        print(
+            "Warning: Falling back to default workflow for native artifacts; "
+            "consider supplying --workflow-url explicitly."
+        )
+        return DEFAULT_WORKFLOW_URL, None
+
+    raise RuntimeError(
+        "Unable to resolve a release workflow for version "
+        f"{version}. Specify --workflow-url to override."
+    )
 
 
 def install_native_components(

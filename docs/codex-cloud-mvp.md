@@ -50,13 +50,12 @@
 
 ## 3. Web 前端蓝图
 
-<!-- prettier-ignore -->
-| 页面 | 关键组件 | 数据来源 | MVP 功能点 |
-| --- | --- | --- | --- |
-| 登录页 | 本地账户表单（Ant Design Form） | API `/auth/session` | 支持本地账户登录、注册、错误反馈 |
-| 任务列表 | 表格、状态标签、搜索框 | `/tasks` | 展示任务标题、状态、更新时间；支持状态筛选 |
+| 页面     | 关键组件                                 | 数据来源                              | MVP 功能点                                      |
+| -------- | ---------------------------------------- | ------------------------------------- | ----------------------------------------------- |
+| 登录页   | 本地账户表单（Ant Design Form）          | API `/auth/session`                   | 支持本地账户登录、注册、错误反馈                |
+| 任务列表 | 表格、状态标签、搜索框                   | `/tasks`                              | 展示任务标题、状态、更新时间；支持状态筛选      |
 | 任务详情 | 任务描述、尝试历史、文本 diff/log 查看器 | `/tasks/{id}`、`/tasks/{id}/attempts` | 展示 diff/log 文本、领取/执行按钮、尝试完成表单 |
-| 任务创建 | 表单（标题、描述、仓库、环境标签） | `/tasks` (POST) | 触发后端创建任务并排队 |
+| 任务创建 | 表单（标题、描述、仓库、环境标签）       | `/tasks` (POST)                       | 触发后端创建任务并排队                          |
 
 - UI 组件库：Chakra UI / Ant Design（二选一）以加快交付，当前以 `next build` + `next start` 提供运行时；后续可按需切换为静态导出。
 - 静态资源由 Caddy 容器提供 HTTPS，证书由 Caddy 自动获取（或导入自签名证书）。
@@ -64,16 +63,15 @@
 
 ## 4. 后端 API 合约（MVP 子集）
 
-<!-- prettier-ignore -->
-| 功能 | 方法 | 请求示例 | 响应 | CLI 兼容点 |
-| --- | --- | --- | --- | --- |
-| 登录会话 | `POST /auth/session` | OAuth 回调码或用户名/密码 | `{ "token": "..." }` | CLI 可注入 Bearer Token 到 `CODEX_CLOUD_API_TOKEN` |
-| 列出任务 | `GET /tasks?status=ready` | Header: `Authorization` | `[{ id, title, status, repo, updated_at }]` | 对应 `CloudBackend::list_tasks` |
-| 获取详情 | `GET /tasks/{id}` | | `{ id, description, diff_url, current_attempt }` | 对应 `get_task_text` / `get_task_diff` |
-| 创建任务 | `POST /tasks` | `{ title, description, repo_id, env }` | `{ id }` | 对应 `create_task` |
-| 领取任务 | `POST /tasks/{id}/claim` | | `{ claim_expires_at }` | 对应 `claim_task` |
-| 提交尝试 | `POST /tasks/{id}/attempts` | `{ environment_id }` | `{ attempt_id }` | CLI `apply_task` 时触发执行 |
-| 上报结果 | `POST /attempts/{id}/complete` | `{ status, diff, log_url }` | `{}` | CLI 轮询 `list_sibling_attempts` 获取 |
+| 功能     | 方法                           | 请求示例                               | 响应                                             | CLI 兼容点                                         |
+| -------- | ------------------------------ | -------------------------------------- | ------------------------------------------------ | -------------------------------------------------- |
+| 登录会话 | `POST /auth/session`           | OAuth 回调码或用户名/密码              | `{ "token": "..." }`                             | CLI 可注入 Bearer Token 到 `CODEX_CLOUD_API_TOKEN` |
+| 列出任务 | `GET /tasks?status=ready`      | Header: `Authorization`                | `[{ id, title, status, repo, updated_at }]`      | 对应 `CloudBackend::list_tasks`                    |
+| 获取详情 | `GET /tasks/{id}`              |                                        | `{ id, description, diff_url, current_attempt }` | 对应 `get_task_text` / `get_task_diff`             |
+| 创建任务 | `POST /tasks`                  | `{ title, description, repo_id, env }` | `{ id }`                                         | 对应 `create_task`                                 |
+| 领取任务 | `POST /tasks/{id}/claim`       |                                        | `{ claim_expires_at }`                           | 对应 `claim_task`                                  |
+| 提交尝试 | `POST /tasks/{id}/attempts`    | `{ environment_id }`                   | `{ attempt_id }`                                 | CLI `apply_task` 时触发执行                        |
+| 上报结果 | `POST /attempts/{id}/complete` | `{ status, diff, log_url }`            | `{}`                                             | CLI 轮询 `list_sibling_attempts` 获取              |
 
 - 所有 diff / 日志存储到对象存储（MinIO 本地实例），返回预签名 URL。
 - MVP 阶段不提供 WebSocket；执行器推送完成后，前端轮询任务详情。
@@ -188,14 +186,13 @@ CREATE TABLE task_attempts (
 
 ## 9. 里程碑拆解
 
-<!-- prettier-ignore -->
-| 里程碑 | 预期交付 | 工期（理想人力 3~4 人） |
-| --- | --- | --- |
-| M0 准备 | 需求冻结、技术栈选型、搭建开发环境 | 1 周 |
-| M1 后端骨架 | Rust (Axum) 单体 + SQLite + 基础 API | 2 周 |
-| M2 前端初版 | Next.js + Ant Design，完成列表/详情/创建 | 2 周 |
-| M3 执行器接入 | Firecracker snapshot、Ignite Supervisor、diff/日志回传 | 3 周 |
-| M4 CLI 验证 | CLI 指向单机 API，完成端到端任务执行 | 1 周 |
+| 里程碑        | 预期交付                                               | 工期（理想人力 3~4 人） |
+| ------------- | ------------------------------------------------------ | ----------------------- |
+| M0 准备       | 需求冻结、技术栈选型、搭建开发环境                     | 1 周                    |
+| M1 后端骨架   | Rust (Axum) 单体 + SQLite + 基础 API                   | 2 周                    |
+| M2 前端初版   | Next.js + Ant Design，完成列表/详情/创建               | 2 周                    |
+| M3 执行器接入 | Firecracker snapshot、Ignite Supervisor、diff/日志回传 | 3 周                    |
+| M4 CLI 验证   | CLI 指向单机 API，完成端到端任务执行                   | 1 周                    |
 
 ## 10. 实施 TODO 列表（分模块拆解）
 
@@ -260,28 +257,26 @@ CREATE TABLE task_attempts (
 
 ### 11.2 前两周冲刺计划（T0~T14）
 
-<!-- prettier-ignore -->
-| 日期区间 | Owner | 主要输出 | 对应 TODO | 状态 |
-| --- | --- | --- | --- | --- |
-| T0~T2 | 平台 | `.env.example`、开发用 Compose、`make dev` 脚本 | 平台基础第 2、3 项 | ✅ 已完成 |
-| T0~T4 | 后端 A | Rust (Axum) Scaffold、sqlx 迁移脚本 | 后端 API 第 1 项 | ✅ 已完成 |
-| T0~T5 | 后端 B | 鉴权（本地账户 + OAuth）与 Token 校验 | 后端 API 第 2 项 | 🟡 进行中（本地账户已上线，OAuth 待评审） |
-| T3~T7 | 前端 | Next.js + Ant Design 项目初始化、登录页 | 前端第 1、2 项（部分） | ✅ 已完成 |
-| T5~T10 | 执行器 | 基础 OCI 镜像、Ignite snapshot、预热脚本草案 | 执行器第 2、4 项 | 未开始 |
-| T8~T14 | 全体 | 端到端冒烟：API + 前端登录 + CLI list | TODO 各模块首项 | 未开始 |
+| 日期区间 | Owner  | 主要输出                                        | 对应 TODO              | 状态                                      |
+| -------- | ------ | ----------------------------------------------- | ---------------------- | ----------------------------------------- |
+| T0~T2    | 平台   | `.env.example`、开发用 Compose、`make dev` 脚本 | 平台基础第 2、3 项     | ✅ 已完成                                 |
+| T0~T4    | 后端 A | Rust (Axum) Scaffold、sqlx 迁移脚本             | 后端 API 第 1 项       | ✅ 已完成                                 |
+| T0~T5    | 后端 B | 鉴权（本地账户 + OAuth）与 Token 校验           | 后端 API 第 2 项       | 🟡 进行中（本地账户已上线，OAuth 待评审） |
+| T3~T7    | 前端   | Next.js + Ant Design 项目初始化、登录页         | 前端第 1、2 项（部分） | ✅ 已完成                                 |
+| T5~T10   | 执行器 | 基础 OCI 镜像、Ignite snapshot、预热脚本草案    | 执行器第 2、4 项       | 未开始                                    |
+| T8~T14   | 全体   | 端到端冒烟：API + 前端登录 + CLI list           | TODO 各模块首项        | 未开始                                    |
 
 > “状态”栏用于每日站会更新，可用 ✅/🟡/🟥 替换文字。完成后需同步检查对应里程碑打勾。
 
 ### 11.3 里程碑追踪面板
 
-<!-- prettier-ignore -->
-| 里程碑 | 负责人 | 目标完成日 | 当前状态 | 阻塞项 |
-| --- | --- | --- | --- | --- |
-| M0 准备 | 平台 Owner | T0 | ✅ 已完成 | - |
-| M1 后端骨架 | 后端 A/B | T14 | 🟡 进行中（Scaffold 已提交） | OAuth 配置待安全评审 |
-| M2 前端初版 | 前端 Owner | T21 | ✅ 已完成（核心页面 + diff/log 组件上线） | - |
-| M3 执行器接入 | 执行器 Owner | T35 | 🟥 未启动 | snapshot 基础镜像等待平台提供构建节点 |
-| M4 CLI 验证 | 全体 | T42 | 🟥 未启动 | 依赖 M1~M3 完成 |
+| 里程碑        | 负责人       | 目标完成日 | 当前状态                                  | 阻塞项                                |
+| ------------- | ------------ | ---------- | ----------------------------------------- | ------------------------------------- |
+| M0 准备       | 平台 Owner   | T0         | ✅ 已完成                                 | -                                     |
+| M1 后端骨架   | 后端 A/B     | T14        | 🟡 进行中（Scaffold 已提交）              | OAuth 配置待安全评审                  |
+| M2 前端初版   | 前端 Owner   | T21        | ✅ 已完成（核心页面 + diff/log 组件上线） | -                                     |
+| M3 执行器接入 | 执行器 Owner | T35        | 🟥 未启动                                 | snapshot 基础镜像等待平台提供构建节点 |
+| M4 CLI 验证   | 全体         | T42        | 🟥 未启动                                 | 依赖 M1~M3 完成                       |
 
 ### 11.4 日常仪式与交付要求
 
@@ -296,14 +291,13 @@ CREATE TABLE task_attempts (
 
 ### 11.1 自动化测试矩阵
 
-<!-- prettier-ignore -->
-| 类别 | 覆盖范围 | 触发方式 | 通过判定 |
-| --- | --- | --- | --- |
-| 后端单元测试 | API 控制器、鉴权、数据库操作 | CI `cargo test` | 100% 关键路径通过，覆盖率 ≥70% |
-| 前端单元 + 组件测试 | React hooks、状态管理、diff/log 组件 | CI `pnpm test` | 所有断言通过；关键交互截图快照更新 |
-| 端到端（E2E） | 登录→任务创建→领取→执行→查看结果 | Playwright 脚本调用真实 API | 流程稳定通过，执行时间 <5 分钟 |
-| CLI 契约测试 | `codex cloud exec` / `codex cloud apply` | GitHub Actions 触发 | CLI 与 API 返回值一致，无 5xx |
-| 执行器集成测试 | Supervisor + Firecracker snapshot | `pytest -m executor`（或 `cargo test -p executor`） | 任务从 queued 到 succeeded，日志 diff 正确上传 |
+| 类别                | 覆盖范围                                 | 触发方式                                            | 通过判定                                       |
+| ------------------- | ---------------------------------------- | --------------------------------------------------- | ---------------------------------------------- |
+| 后端单元测试        | API 控制器、鉴权、数据库操作             | CI `cargo test`                                     | 100% 关键路径通过，覆盖率 ≥70%                 |
+| 前端单元 + 组件测试 | React hooks、状态管理、diff/log 组件     | CI `pnpm test`                                      | 所有断言通过；关键交互截图快照更新             |
+| 端到端（E2E）       | 登录→任务创建→领取→执行→查看结果         | Playwright 脚本调用真实 API                         | 流程稳定通过，执行时间 <5 分钟                 |
+| CLI 契约测试        | `codex cloud exec` / `codex cloud apply` | GitHub Actions 触发                                 | CLI 与 API 返回值一致，无 5xx                  |
+| 执行器集成测试      | Supervisor + Firecracker snapshot        | `pytest -m executor`（或 `cargo test -p executor`） | 任务从 queued 到 succeeded，日志 diff 正确上传 |
 
 ### 11.2 手动验收清单
 

@@ -24,6 +24,7 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 http = "1"
 minio = { version = "0.3", default-features = false, features = ["rustls-tls", "ring"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 
 [dev-dependencies]
 axum = { version = "0.8", features = ["macros", "json"] }
@@ -31,3 +32,4 @@ reqwest = { version = "0.12", features = ["json"] }
 serde_json = "1"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+wiremock = "0.6"

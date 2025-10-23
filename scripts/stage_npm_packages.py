@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -17,7 +18,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_SCRIPT = REPO_ROOT / "codex-cli" / "scripts" / "build_npm_package.py"
 INSTALL_NATIVE_DEPS = REPO_ROOT / "codex-cli" / "scripts" / "install_native_deps.py"
 WORKFLOW_NAME = ".github/workflows/rust-release.yml"
-GITHUB_REPO = "openai/codex"
 
 _SPEC = importlib.util.spec_from_file_location("codex_build_npm_package", BUILD_SCRIPT)
 if _SPEC is None or _SPEC.loader is None:
@@ -25,6 +25,17 @@ if _SPEC is None or _SPEC.loader is None:
 _BUILD_MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_BUILD_MODULE)
 PACKAGE_NATIVE_COMPONENTS = getattr(_BUILD_MODULE, "PACKAGE_NATIVE_COMPONENTS", {})
+
+_INSTALL_SPEC = importlib.util.spec_from_file_location(
+    "codex_install_native_deps", INSTALL_NATIVE_DEPS
+)
+if _INSTALL_SPEC is None or _INSTALL_SPEC.loader is None:
+    raise RuntimeError(f"Unable to load module from {INSTALL_NATIVE_DEPS}")
+_INSTALL_MODULE = importlib.util.module_from_spec(_INSTALL_SPEC)
+_INSTALL_SPEC.loader.exec_module(_INSTALL_MODULE)
+DEFAULT_NATIVE_WORKFLOW_URL = getattr(
+    _INSTALL_MODULE, "DEFAULT_WORKFLOW_URL", ""
+).strip()
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,99 +77,116 @@ def collect_native_components(packages: list[str]) -> set[str]:
     return components
 
 
-def _gh_json(args: list[str]) -> object:
+def _normalize_ref(ref: str) -> str:
+    ref = ref.strip()
+    for prefix in ("refs/heads/", "refs/tags/"):
+        if ref.startswith(prefix):
+            return ref[len(prefix) :]
+    return ref
+
+
+def _candidate_branches(version: str) -> list[str]:
+    version = version.strip()
+    if not version:
+        return []
+
+    semver_like = bool(re.match(r"^v?\d+\.\d+\.\d+.*$", version))
+    base_versions = [version]
+    if semver_like and not version.startswith("v"):
+        base_versions.append(f"v{version}")
+
+    prefixes = [
+        None,
+        "release",
+        "rust",
+        "rust-release",
+        "rust-nse",
+        "first-release",
+    ]
+
+    candidates: list[str] = []
+    for base in base_versions:
+        candidates.append(base)
+        candidates.append(base.replace("-", "/"))
+        if base.startswith("rust-"):
+            continue
+        candidates.append(f"rust-v{base}")
+        candidates.append(f"rust/{base}")
+        for prefix in prefixes:
+            if not prefix:
+                continue
+            for separator in ("-", "/"):
+                candidates.append(f"{prefix}{separator}{base}")
+
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for candidate in candidates:
+        candidate = candidate.strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        deduped.append(candidate)
+    return deduped
+
+
+def _find_workflow_run(version: str, workflow_name: str) -> dict | None:
     try:
-        stdout = subprocess.check_output(args, cwd=REPO_ROOT, text=True)
+        stdout = subprocess.check_output(
+            [
+                "gh",
+                "run",
+                "list",
+                "--workflow",
+                workflow_name,
+                "--json",
+                "databaseId,headBranch,headSha,displayTitle,url",
+                "--limit",
+                "200",
+            ],
+            cwd=REPO_ROOT,
+            text=True,
+        )
     except subprocess.CalledProcessError:
         return None
-    stdout = stdout.strip()
-    if not stdout:
-        return None
-    try:
-        return json.loads(stdout)
-    except json.JSONDecodeError:
+    runs = json.loads(stdout or "[]")
+    if not runs:
         return None
 
+    candidates = _candidate_branches(version)
+    for candidate in candidates:
+        candidate_norm = _normalize_ref(candidate)
+        for run in runs:
+            branch = _normalize_ref(run.get("headBranch", ""))
+            if not branch:
+                continue
+            if branch == candidate_norm or branch.endswith(f"/{candidate_norm}"):
+                return run
 
-def _candidate_release_refs(version: str) -> list[tuple[str, str]]:
-    refs: list[tuple[str, str]] = []
+    lower_version = version.lower()
+    for run in runs:
+        branch = _normalize_ref(run.get("headBranch", "")).lower()
+        title = (run.get("displayTitle") or "").lower()
+        if lower_version and (lower_version in branch or lower_version in title):
+            return run
 
-    release_info = _gh_json(
-        [
-            "gh",
-            "release",
-            "view",
-            version,
-            "--json",
-            "tagName,targetCommitish",
-            "--repo",
-            GITHUB_REPO,
-        ]
-    )
-
-    if isinstance(release_info, dict):
-        tag_name = release_info.get("tagName")
-        if isinstance(tag_name, str) and tag_name:
-            refs.append(("tag", tag_name))
-
-        target_branch = release_info.get("targetCommitish")
-        if isinstance(target_branch, str) and target_branch:
-            refs.append(("branch", target_branch))
-
-    # Fallbacks for legacy naming conventions
-    refs.extend(
-        [
-            ("tag", f"rust-v{version}"),
-            ("branch", f"rust-v{version}"),
-            ("tag", version),
-            ("branch", version),
-        ]
-    )
-
-    # Deduplicate while preserving order
-    seen: set[tuple[str, str]] = set()
-    unique_refs: list[tuple[str, str]] = []
-    for ref in refs:
-        if ref in seen:
-            continue
-        seen.add(ref)
-        unique_refs.append(ref)
-    return unique_refs
-
-
-def _resolve_workflow_from_ref(ref_type: str, ref: str) -> dict | None:
-    base_cmd = [
-        "gh",
-        "run",
-        "list",
-        "--json",
-        "workflowName,url,headSha",
-        "--workflow",
-        WORKFLOW_NAME,
-        "--repo",
-        GITHUB_REPO,
-        "--jq",
-        "first(.[])",
-    ]
-    if ref_type == "tag":
-        base_cmd.extend(["--tag", ref])
-    elif ref_type == "branch":
-        base_cmd.extend(["--branch", ref])
-    else:
-        return None
-
-    workflow = _gh_json(base_cmd)
-    if isinstance(workflow, dict) and workflow.get("url"):
-        return workflow
     return None
 
 
 def resolve_release_workflow(version: str) -> dict:
-    for ref_type, ref in _candidate_release_refs(version):
-        workflow = _resolve_workflow_from_ref(ref_type, ref)
+    workflow = _find_workflow_run(version, WORKFLOW_NAME)
+    if workflow:
+        return workflow
+
+    for workflow_name in ADDITIONAL_WORKFLOWS:
+        workflow = _find_workflow_run(version, workflow_name)
         if workflow:
             return workflow
-    raise RuntimeError(f"Unable to find rust-release workflow for version {version}.")
+
+    tried = [WORKFLOW_NAME, *ADDITIONAL_WORKFLOWS]
+    raise RuntimeError(
+        "Unable to find release workflow run for version "
+        f"{version}. Tried workflows: {', '.join(tried)}."
+    )
 
 
 def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str | None]:
@@ -166,7 +194,21 @@ def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str |
         return override, None
 
     workflow = resolve_release_workflow(version)
-    return workflow["url"], workflow.get("headSha")
+    if workflow:
+        return workflow["url"], workflow.get("headSha")
+
+    fallback = os.environ.get("CODEX_DEFAULT_WORKFLOW_URL", DEFAULT_NATIVE_WORKFLOW_URL)
+    if not fallback:
+        raise RuntimeError(
+            "Unable to find a release workflow run and no fallback workflow "
+            "URL is configured."
+        )
+
+    print(
+        "Falling back to default workflow artifacts at "
+        f"{fallback}."
+    )
+    return fallback, None
 
 
 def install_native_components(

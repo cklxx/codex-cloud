@@ -50,6 +50,7 @@
 
 ## 3. Web 前端蓝图
 
+<!-- prettier-ignore -->
 | 页面 | 关键组件 | 数据来源 | MVP 功能点 |
 | --- | --- | --- | --- |
 | 登录页 | 本地账户表单（Ant Design Form） | API `/auth/session` | 支持本地账户登录、注册、错误反馈 |
@@ -63,6 +64,7 @@
 
 ## 4. 后端 API 合约（MVP 子集）
 
+<!-- prettier-ignore -->
 | 功能 | 方法 | 请求示例 | 响应 | CLI 兼容点 |
 | --- | --- | --- | --- | --- |
 | 登录会话 | `POST /auth/session` | OAuth 回调码或用户名/密码 | `{ "token": "..." }` | CLI 可注入 Bearer Token 到 `CODEX_CLOUD_API_TOKEN` |
@@ -79,10 +81,12 @@
 ## 5. 执行器设计（Firecracker 单机版）
 
 1. **触发机制**：
-  - Supervisor 进程每 2 秒轮询 SQLite `task_attempts`，挑选 `status = "queued"` 的记录。
-   - 使用 Ignite CLI (`ignite run`) 启动 Firecracker microVM，选择预热好的 snapshot。
+
+- Supervisor 进程每 2 秒轮询 SQLite `task_attempts`，挑选 `status = "queued"` 的记录。
+- 使用 Ignite CLI (`ignite run`) 启动 Firecracker microVM，选择预热好的 snapshot。
 
 2. **执行步骤**：
+
    - 通过 snapshot 恢复 microVM，启动脚本挂载只读基础镜像和可写 overlay。
    - 在 microVM 内克隆仓库快照（使用本地 bare 仓库缓存）。
    - 安装任务依赖（若 snapshot 已预装常用语言环境，仅拉取缺失依赖）。
@@ -90,6 +94,7 @@
    - 调用 API `complete` 上传结果，随后销毁 microVM。
 
 3. **镜像与快照策略**：
+
    - 基础镜像：Debian slim + git + pnpm + Rust toolchain + Python。构建后通过 Ignite 生成 Firecracker snapshot。
    - 启动脚本在 snapshot 中预载常用依赖缓存（npm、pip、cargo registry），缩短冷启动时间。
    - Supervisor 维护一个 3~5 个微虚拟机的预热池，避免高并发时出现冷启动尖峰。
@@ -100,17 +105,18 @@
 
 ## 6. 容器启动速度调研与选型
 
-| 方案 | 平均启动时延 | 优势 | 劣势 | 结论 |
-| --- | --- | --- | --- | --- |
-| Docker / containerd 标准容器 | 0.8~1.2 秒（空镜像） | 生态成熟、易用 | 启动路径长，冷镜像拉取慢 | 作为基线，仅在开发模式使用 |
-| Kata Containers | ~0.4 秒（带 VM 隔离） | 强隔离、兼容 OCI | 需要额外内核模块 | 可作为后续多租户演进方向 |
-| **Firecracker（Ignite snapshot）** | **120~250 ms**（官方性能报告，snapshot 预热） | 微秒级开销、强隔离、启动最快 | 需要 KVM 支持，镜像需要预处理 | **MVP 首选** |
+| 方案                               | 平均启动时延                                  | 优势                         | 劣势                          | 结论                       |
+| ---------------------------------- | --------------------------------------------- | ---------------------------- | ----------------------------- | -------------------------- |
+| Docker / containerd 标准容器       | 0.8~1.2 秒（空镜像）                          | 生态成熟、易用               | 启动路径长，冷镜像拉取慢      | 作为基线，仅在开发模式使用 |
+| Kata Containers                    | ~0.4 秒（带 VM 隔离）                         | 强隔离、兼容 OCI             | 需要额外内核模块              | 可作为后续多租户演进方向   |
+| **Firecracker（Ignite snapshot）** | **120~250 ms**（官方性能报告，snapshot 预热） | 微秒级开销、强隔离、启动最快 | 需要 KVM 支持，镜像需要预处理 | **MVP 首选**               |
 
 - Firecracker 团队披露的基准数据显示，通过 snapshot 恢复可在 125 ms 内完成 microVM 启动，即使加上初始化脚本也能稳定控制在 300 ms 内。[^firecracker]
 - Ignite 提供容器式 UX（`ignite run`），可直接在单机 Docker Compose 中运行，并允许以 OCI 镜像为基础制作 snapshot。[^ignite]
 - 为进一步降低延迟，可结合 [stargz-snapshotter](https://github.com/containerd/stargz-snapshotter) 或 lazy-pull 技术对基础镜像进行按需加载，避免首次启动拉取大镜像。
 
 [^firecracker]: Firecracker "Performance" 文档指出恢复 snapshot 的启动时延约 125 ms，详见 <https://github.com/firecracker-microvm/firecracker/blob/main/docs/performance.md>。
+
 [^ignite]: Weaveworks Ignite 将 OCI 镜像转换为 Firecracker microVM，并在官方文档中强调子秒级启动，详见 <https://ignite.readthedocs.io/en/stable/overview.html>。
 
 ## 7. 数据模型概览
@@ -182,6 +188,7 @@ CREATE TABLE task_attempts (
 
 ## 9. 里程碑拆解
 
+<!-- prettier-ignore -->
 | 里程碑 | 预期交付 | 工期（理想人力 3~4 人） |
 | --- | --- | --- |
 | M0 准备 | 需求冻结、技术栈选型、搭建开发环境 | 1 周 |
@@ -253,6 +260,7 @@ CREATE TABLE task_attempts (
 
 ### 11.2 前两周冲刺计划（T0~T14）
 
+<!-- prettier-ignore -->
 | 日期区间 | Owner | 主要输出 | 对应 TODO | 状态 |
 | --- | --- | --- | --- | --- |
 | T0~T2 | 平台 | `.env.example`、开发用 Compose、`make dev` 脚本 | 平台基础第 2、3 项 | ✅ 已完成 |
@@ -266,6 +274,7 @@ CREATE TABLE task_attempts (
 
 ### 11.3 里程碑追踪面板
 
+<!-- prettier-ignore -->
 | 里程碑 | 负责人 | 目标完成日 | 当前状态 | 阻塞项 |
 | --- | --- | --- | --- | --- |
 | M0 准备 | 平台 Owner | T0 | ✅ 已完成 | - |
@@ -287,6 +296,7 @@ CREATE TABLE task_attempts (
 
 ### 11.1 自动化测试矩阵
 
+<!-- prettier-ignore -->
 | 类别 | 覆盖范围 | 触发方式 | 通过判定 |
 | --- | --- | --- | --- |
 | 后端单元测试 | API 控制器、鉴权、数据库操作 | CI `cargo test` | 100% 关键路径通过，覆盖率 ≥70% |

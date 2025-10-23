@@ -18,6 +18,7 @@
 
 根据 CLI 暴露的 API 行为与交互流程，可将 Codex Cloud 能力拆分为以下核心域：
 
+<!-- prettier-ignore -->
 | 域 | 关键功能 | 核心接口 / 参考 | 自建要点 |
 | --- | --- | --- | --- |
 | 身份与工作区 | ChatGPT 登录态、ChatGPT-Account-Id 头 | `codex_cloud_tasks::init_backend` 中对会话与账户标识的加载流程 | 用企业 IdP + OIDC/OAuth2 替换，发放短期访问令牌与工作区上下文 |
@@ -88,6 +89,7 @@
 
 ## 6. 接口设计（REST/GraphQL 草案）
 
+<!-- prettier-ignore -->
 | 功能 | 方法与路径 | 请求示例 | 响应要点 |
 | --- | --- | --- | --- |
 | 列表任务 | `GET /v1/tasks?status=ready&workspace=foo` | 支持分页、模糊搜索 | 返回 summaries，与 CLI 期待结构对齐 (`TaskSummary`) |
@@ -129,6 +131,7 @@
 
 ## 9. 风险与缓解
 
+<!-- prettier-ignore -->
 | 风险 | 描述 | 缓解措施 |
 | --- | --- | --- |
 | 模型成本不可控 | 多次尝试会增加调用量 | 引入配额、成本仪表板、自动降级模型 |
@@ -149,6 +152,5 @@
 - 依据本方案产出更详细的系统设计 (LLD) 与序列图。
 - 选择并集成具体的模型服务，实现计划/执行模块。
 - 规划安全评估与渗透测试，确保上线前通过合规审查。
-
 
 [^firecracker-plan]: Firecracker "Performance" 文档指出通过 snapshot 恢复 microVM 的启动时延约 125 ms，详见 <https://github.com/firecracker-microvm/firecracker/blob/main/docs/performance.md>。

@@ -185,7 +185,7 @@ impl OidcProvider {
 
         let mut validation = Validation::new(alg);
         validation.validate_aud = false;
-        validation.set_issuer(&[self.issuer.clone()]);
+        validation.set_issuer(std::slice::from_ref(&self.issuer));
         validation.leeway = 5;
 
         let claims =
@@ -389,8 +389,8 @@ where
 {
     type Rejection = AppError;
 
-    fn from_request_parts<'a>(
-        parts: &'a mut Parts,
+    fn from_request_parts(
+        parts: &mut Parts,
         state: &S,
     ) -> impl Future<Output = Result<Self, Self::Rejection>> + Send {
         let state = AppState::from_ref(state);

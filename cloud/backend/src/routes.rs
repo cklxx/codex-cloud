@@ -955,12 +955,11 @@ fn extract_codex_prompt(items: &[CodexInputItem]) -> Result<String, AppError> {
                 .as_deref()
                 .map(|ct| ct.eq_ignore_ascii_case("text"))
                 .unwrap_or(true)
+                && let Some(text) = fragment.text.as_ref()
             {
-                if let Some(text) = fragment.text.as_ref() {
-                    let trimmed = text.trim();
-                    if !trimmed.is_empty() {
-                        segments.push(trimmed.to_string());
-                    }
+                let trimmed = text.trim();
+                if !trimmed.is_empty() {
+                    segments.push(trimmed.to_string());
                 }
             }
         }

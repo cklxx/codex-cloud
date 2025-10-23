@@ -3,22 +3,32 @@ use sqlx::SqlitePool;
 
 use crate::artifacts::ArtifactStore;
 use crate::config::AppConfig;
+use crate::error::AppError;
+use crate::security::OidcProvider;
 
 #[derive(Clone)]
 pub struct AppState {
     pub pool: SqlitePool,
     pub config: AppConfig,
     pub artifacts: ArtifactStore,
+    pub oidc: Option<OidcProvider>,
 }
 
 impl AppState {
-    pub fn new(pool: SqlitePool, config: AppConfig) -> Self {
+    pub async fn new(pool: SqlitePool, config: AppConfig) -> Result<Self, AppError> {
         let artifacts = ArtifactStore::new(&config);
-        Self {
+        let oidc = if let Some(oidc_config) = &config.oidc {
+            Some(OidcProvider::discover(oidc_config.clone()).await?)
+        } else {
+            None
+        };
+
+        Ok(Self {
             pool,
             artifacts,
             config,
-        }
+            oidc,
+        })
     }
 }
 

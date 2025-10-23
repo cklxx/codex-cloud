@@ -7,6 +7,7 @@ import argparse
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -17,6 +18,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 BUILD_SCRIPT = REPO_ROOT / "codex-cli" / "scripts" / "build_npm_package.py"
 INSTALL_NATIVE_DEPS = REPO_ROOT / "codex-cli" / "scripts" / "install_native_deps.py"
 WORKFLOW_NAME = ".github/workflows/rust-release.yml"
+ADDITIONAL_WORKFLOWS = (
+    ".github/workflows/rust-nse.yml",
+    ".github/workflows/first-release.yml",
+)
 GITHUB_REPO = "openai/codex"
 
 _SPEC = importlib.util.spec_from_file_location("codex_build_npm_package", BUILD_SCRIPT)
@@ -66,28 +71,116 @@ def collect_native_components(packages: list[str]) -> set[str]:
     return components
 
 
+def _normalize_ref(ref: str) -> str:
+    ref = ref.strip()
+    for prefix in ("refs/heads/", "refs/tags/"):
+        if ref.startswith(prefix):
+            return ref[len(prefix) :]
+    return ref
+
+
+def _candidate_branches(version: str) -> list[str]:
+    version = version.strip()
+    if not version:
+        return []
+
+    semver_like = bool(re.match(r"^v?\d+\.\d+\.\d+.*$", version))
+    base_versions = [version]
+    if semver_like and not version.startswith("v"):
+        base_versions.append(f"v{version}")
+
+    prefixes = [
+        None,
+        "release",
+        "rust",
+        "rust-release",
+        "rust-nse",
+        "first-release",
+    ]
+
+    candidates: list[str] = []
+    for base in base_versions:
+        candidates.append(base)
+        candidates.append(base.replace("-", "/"))
+        if base.startswith("rust-"):
+            continue
+        candidates.append(f"rust-v{base}")
+        candidates.append(f"rust/{base}")
+        for prefix in prefixes:
+            if not prefix:
+                continue
+            for separator in ("-", "/"):
+                candidates.append(f"{prefix}{separator}{base}")
+
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for candidate in candidates:
+        candidate = candidate.strip()
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        deduped.append(candidate)
+    return deduped
+
+
+def _find_workflow_run(version: str, workflow_name: str) -> dict | None:
+    try:
+        stdout = subprocess.check_output(
+            [
+                "gh",
+                "run",
+                "list",
+                "--workflow",
+                workflow_name,
+                "--json",
+                "databaseId,headBranch,headSha,displayTitle,url",
+                "--limit",
+                "200",
+            ],
+            cwd=REPO_ROOT,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return None
+    runs = json.loads(stdout or "[]")
+    if not runs:
+        return None
+
+    candidates = _candidate_branches(version)
+    for candidate in candidates:
+        candidate_norm = _normalize_ref(candidate)
+        for run in runs:
+            branch = _normalize_ref(run.get("headBranch", ""))
+            if not branch:
+                continue
+            if branch == candidate_norm or branch.endswith(f"/{candidate_norm}"):
+                return run
+
+    lower_version = version.lower()
+    for run in runs:
+        branch = _normalize_ref(run.get("headBranch", "")).lower()
+        title = (run.get("displayTitle") or "").lower()
+        if lower_version and (lower_version in branch or lower_version in title):
+            return run
+
+    return None
+
+
 def resolve_release_workflow(version: str) -> dict:
-    stdout = subprocess.check_output(
-        [
-            "gh",
-            "run",
-            "list",
-            "--branch",
-            f"rust-v{version}",
-            "--json",
-            "workflowName,url,headSha",
-            "--workflow",
-            WORKFLOW_NAME,
-            "--jq",
-            "first(.[])",
-        ],
-        cwd=REPO_ROOT,
-        text=True,
+    workflow = _find_workflow_run(version, WORKFLOW_NAME)
+    if workflow:
+        return workflow
+
+    for workflow_name in ADDITIONAL_WORKFLOWS:
+        workflow = _find_workflow_run(version, workflow_name)
+        if workflow:
+            return workflow
+
+    tried = [WORKFLOW_NAME, *ADDITIONAL_WORKFLOWS]
+    raise RuntimeError(
+        "Unable to find release workflow run for version "
+        f"{version}. Tried workflows: {', '.join(tried)}."
     )
-    workflow = json.loads(stdout or "null")
-    if not workflow:
-        raise RuntimeError(f"Unable to find rust-release workflow for version {version}.")
-    return workflow
 
 
 def resolve_workflow_url(version: str, override: str | None) -> tuple[str, str | None]:

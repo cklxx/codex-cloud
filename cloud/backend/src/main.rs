@@ -66,7 +66,7 @@ async fn serve(config: AppConfig, addr: String) -> Result<()> {
     prepare_environment(&config)?;
     let pool = db::connect(&config.database_url).await?;
     db::init_db(&pool).await?;
-    let state = AppState::new(pool, config);
+    let state = AppState::new(pool, config).await?;
     let app = app_router(state);
 
     let listener = TcpListener::bind(&addr).await?;
@@ -126,10 +126,10 @@ async fn create_admin(
 }
 
 fn prepare_environment(config: &AppConfig) -> Result<()> {
-    if let Some(path) = config.database_path().and_then(|path| path.parent()) {
-        if !path.exists() {
-            fs::create_dir_all(path)?;
-        }
+    if let Some(path) = config.database_path().and_then(|path| path.parent())
+        && !path.exists()
+    {
+        fs::create_dir_all(path)?;
     }
     config.ensure_artifact_dir()?;
     Ok(())

@@ -19,6 +19,36 @@ BUILD_SCRIPT = REPO_ROOT / "codex-cli" / "scripts" / "build_npm_package.py"
 INSTALL_NATIVE_DEPS = REPO_ROOT / "codex-cli" / "scripts" / "install_native_deps.py"
 WORKFLOW_NAME = ".github/workflows/rust-release.yml"
 
+WORKFLOW_SEARCH_ORDER: tuple[tuple[str, tuple[str | None, ...]], ...] = (
+    (
+        ".github/workflows/rust-release.yml",
+        (
+            "rust-v{version}",
+            "rust-release-v{version}",
+            "rust-release/{version}",
+            "release/v{version}",
+            None,
+        ),
+    ),
+    (
+        ".github/workflows/rust-nse.yml",
+        (
+            "rust-nse-v{version}",
+            "rust-nse/{version}",
+            "nse-v{version}",
+            None,
+        ),
+    ),
+    (
+        ".github/workflows/first-release.yml",
+        (
+            "first-release-v{version}",
+            "first-release/{version}",
+            None,
+        ),
+    ),
+)
+
 _SPEC = importlib.util.spec_from_file_location("codex_build_npm_package", BUILD_SCRIPT)
 if _SPEC is None or _SPEC.loader is None:
     raise RuntimeError(f"Unable to load module from {BUILD_SCRIPT}")

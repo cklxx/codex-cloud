@@ -56,7 +56,7 @@ codex-responses-api-proxy [--port <PORT>] [--server-info <FILE>] [--http-shutdow
 
 Care is taken to restrict access/copying to the value of `OPENAI_API_KEY` retained in memory:
 
-- We leverage [`codex_process_hardening`](https://github.com/openai/codex/blob/main/codex-rs/process-hardening/README.md) so `codex-responses-api-proxy` is run with standard process-hardening techniques.
+- We leverage [`codex_process_hardening`](https://github.com/cklxx/codex-cloud/blob/main/codex-rs/process-hardening/README.md) so `codex-responses-api-proxy` is run with standard process-hardening techniques.
 - At startup, we allocate a `1024` byte buffer on the stack and write `"Bearer "` as the first `7` bytes.
 - We then read from `stdin`, copying the contents into the buffer after `"Bearer "`.
 - After verifying the key matches `/^[a-zA-Z0-9_-]+$/` (and does not exceed the buffer), we create a `String` from that buffer (so the data is now on the heap).

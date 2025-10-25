@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use codex_cloud_backend::config::AppConfig;
 use codex_cloud_backend::db;
-use codex_cloud_backend::models::{CreateUserResponse, format_datetime};
+use codex_cloud_backend::models::{format_datetime, CreateUserResponse};
 use codex_cloud_backend::routes::app_router;
 use codex_cloud_backend::security::hash_password;
 use codex_cloud_backend::state::AppState;
@@ -126,10 +126,10 @@ async fn create_admin(
 }
 
 fn prepare_environment(config: &AppConfig) -> Result<()> {
-    if let Some(path) = config.database_path().and_then(|path| path.parent())
-        && !path.exists()
-    {
-        fs::create_dir_all(path)?;
+    if let Some(path) = config.database_path().and_then(|path| path.parent()) {
+        if !path.exists() {
+            fs::create_dir_all(path)?;
+        }
     }
     config.ensure_artifact_dir()?;
     Ok(())

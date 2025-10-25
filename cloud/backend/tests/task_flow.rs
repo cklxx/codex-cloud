@@ -138,11 +138,9 @@ async fn end_to_end_task_flow() {
         .unwrap();
     assert!(tasks.status().is_success());
     let tasks_body = tasks.json::<serde_json::Value>().await.unwrap();
-    assert!(
-        tasks_body
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|task| task["id"] == detail_body["id"])
-    );
+    assert!(tasks_body
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|task| task["id"] == detail_body["id"]));
 }

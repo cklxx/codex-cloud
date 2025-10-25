@@ -61,7 +61,7 @@ jobs:
         with:
           components: rustfmt
       - name: cargo fmt
-        run: cargo fmt -- --config imports_granularity=Item --check
+        run: cargo fmt --manifest-path Cargo.toml --all -- --config imports_granularity=Item --check
       - name: Verify codegen for mcp-types
         run: ./mcp-types/check_lib_rs.py
 
@@ -233,9 +233,9 @@ jobs:
       # Fail the job if any of the previous steps failed.
       - name: verify all steps passed
         if: |
-          steps.clippy.outcome == 'failure' ||
-          steps.cargo_check_all_crates.outcome == 'failure' ||
-          steps.test.outcome == 'failure'
+          steps.clippy.conclusion == 'failure' ||
+          steps.cargo_check_all_crates.conclusion == 'failure' ||
+          steps.test.conclusion == 'failure'
         run: |
           echo "One or more checks failed (clippy, cargo_check_all_crates, or test). See logs for details."
           exit 1

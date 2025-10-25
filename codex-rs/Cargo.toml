@@ -242,7 +242,7 @@ lto = "fat"
 # remove everything to make the binary as small as possible.
 strip = "symbols"
 
-# See https://github.com/openai/codex/issues/1411 for details.
+# See https://github.com/cklxx/codex-cloud/issues/1411 for details.
 codegen-units = 1
 
 [patch.crates-io]

@@ -4,16 +4,16 @@ on:
   push:
     branches: [main]
     paths:
-      - 'cloud/**'
-      - 'docs/cloud/**'
-      - '.github/workflows/cloud-ci.yml'
-      - 'codex-rs/**'
+      - "cloud/**"
+      - "docs/cloud/**"
+      - ".github/workflows/cloud-ci.yml"
+      - "codex-rs/**"
   pull_request:
     paths:
-      - 'cloud/**'
-      - 'docs/cloud/**'
-      - '.github/workflows/cloud-ci.yml'
-      - 'codex-rs/**'
+      - "cloud/**"
+      - "docs/cloud/**"
+      - ".github/workflows/cloud-ci.yml"
+      - "codex-rs/**"
 
 concurrency:
   group: cloud-ci-${{ github.ref }}
@@ -55,7 +55,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'pnpm'
+          cache: "pnpm"
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

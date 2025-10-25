@@ -18,7 +18,7 @@ from urllib.request import urlopen
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 CODEX_CLI_ROOT = SCRIPT_DIR.parent
-DEFAULT_WORKFLOW_URL = "https://github.com/openai/codex/actions/runs/17952349351"  # rust-v0.40.0
+DEFAULT_WORKFLOW_URL = "https://github.com/cklxx/codex-cloud/actions/runs/1"  # placeholder workflow
 VENDOR_DIR_NAME = "vendor"
 RG_MANIFEST = CODEX_CLI_ROOT / "bin" / "rg"
 BINARY_TARGETS = (
@@ -64,7 +64,7 @@ DEFAULT_RG_TARGETS = [target for target, _ in RG_TARGET_PLATFORM_PAIRS]
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Install native Codex binaries.")
+    parser = argparse.ArgumentParser(description="Install native Codex Cloud binaries.")
     parser.add_argument(
         "--workflow-url",
         help=(
@@ -197,7 +197,7 @@ def _download_artifacts(workflow_id: str, dest_dir: Path) -> None:
         "--dir",
         str(dest_dir),
         "--repo",
-        "openai/codex",
+        "cklxx/codex-cloud",
         workflow_id,
     ]
     subprocess.check_call(cmd)

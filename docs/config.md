@@ -151,7 +151,7 @@ Determines when the user should be prompted to approve whether Codex can execute
 # Setting the approval_policy to `untrusted` means that Codex will prompt the
 # user before running a command not in the "trusted" set.
 #
-# See https://github.com/openai/codex/issues/1260 for the plan to enable
+# See https://github.com/cklxx/codex-cloud/issues/1260 for the plan to enable
 # end-users to define their own trusted commands.
 approval_policy = "untrusted"
 ```
@@ -354,7 +354,7 @@ command = "npx"
 args = ["-y", "mcp-server"]
 # Optional: propagate additional env vars to the MVP server.
 # A default whitelist of env vars will be propagated to the MCP server.
-# https://github.com/openai/codex/blob/main/codex-rs/rmcp-client/src/utils.rs#L82
+# https://github.com/cklxx/codex-cloud/blob/main/codex-rs/rmcp-client/src/utils.rs#L82
 env = { "API_KEY" = "value" }
 # or
 [mcp_servers.server_name.env]

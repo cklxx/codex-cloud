@@ -17,9 +17,9 @@ rec {
       openssl
     ];
     meta = with pkgs.lib; {
-      description = "OpenAI Codex command‑line interface rust implementation";
+      description = "Independent Codex Cloud command-line interface implemented in Rust";
       license = licenses.asl20;
-      homepage = "https://github.com/openai/codex";
+      homepage = "https://github.com/cklxx/codex-cloud";
     };
   };
   devShell = pkgs.mkShell {

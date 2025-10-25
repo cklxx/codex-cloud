@@ -4,14 +4,17 @@ RUN corepack enable
 
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY .npmrc .npmrc
 COPY cloud/frontend/package.json ./cloud/frontend/package.json
 RUN pnpm install --frozen-lockfile --filter codex-cloud-frontend...
 
 FROM base AS builder
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+COPY .npmrc .npmrc
 COPY cloud/frontend ./cloud/frontend
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/cloud/frontend/node_modules ./cloud/frontend/node_modules
+RUN pnpm install --frozen-lockfile --filter codex-cloud-frontend...
 RUN pnpm --filter codex-cloud-frontend build
 
 FROM base AS runner
